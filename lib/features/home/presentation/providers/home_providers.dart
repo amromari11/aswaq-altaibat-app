@@ -23,6 +23,10 @@ final weeklyOffersProvider = FutureProvider<List<Product>>((ref) {
   return ref.watch(homeRepositoryProvider).fetchWeeklyOffers();
 });
 
+final latestProductsProvider = FutureProvider<List<Product>>((ref) {
+  return ref.watch(homeRepositoryProvider).fetchLatestProducts();
+});
+
 final appExclusiveProductsProvider = FutureProvider<List<Product>>((ref) {
   return ref.watch(homeRepositoryProvider).fetchAppExclusive();
 });

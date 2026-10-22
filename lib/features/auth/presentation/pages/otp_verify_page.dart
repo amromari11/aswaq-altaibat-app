@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -43,8 +42,10 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
             phone: widget.phone,
             token: token,
           );
-      if (!mounted) return;
-      context.go('/home');
+      // No navigation here — a successful verify flips currentUserProvider
+      // to non-null, and the app-level listener in main.dart is what
+      // navigates (to /checkout, /home, or wherever sent the user to sign
+      // in), the same way it does for Google sign-in.
     } catch (error) {
       setState(() => _errorMessage = 'رمز التحقق غير صحيح. حاول مرة أخرى.');
     } finally {

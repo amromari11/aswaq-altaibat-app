@@ -24,5 +24,16 @@ class AuthRepository {
     );
   }
 
+  /// Requires Google enabled under Authentication → Providers in the
+  /// Supabase dashboard (with a Google Cloud OAuth client ID/secret), plus
+  /// platform redirect setup this app doesn't have yet: a custom URL scheme
+  /// registered in `ios/Runner/Info.plist` and an intent-filter in
+  /// `android/app/src/main/AndroidManifest.xml` so the OAuth redirect can
+  /// return to the app. Without both, this call will fail or strand the
+  /// user in the browser after sign-in.
+  Future<bool> signInWithGoogle() {
+    return _client.auth.signInWithOAuth(OAuthProvider.google);
+  }
+
   Future<void> signOut() => _client.auth.signOut();
 }

@@ -21,7 +21,9 @@ class CategoryBubbleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 92,
+      // 60 bubble + 6 gap + two lines of Cairo caption (~34) — 92 clipped
+      // two-line names like "اجبان والبان ومشتقاتها" by 8px.
+      height: 104,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: categories.length,
@@ -56,14 +58,18 @@ class CategoryBubbleRow extends StatelessWidget {
                         : _fallbackIcon(isSelected),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    category.nameAr,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.caption.copyWith(
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                      color: isSelected ? AppColors.primaryDark : AppColors.textSecondary,
+                  // Flexible so a larger system text scale shrinks the label
+                  // area instead of overflowing the fixed-height row.
+                  Flexible(
+                    child: Text(
+                      category.nameAr,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                        color: isSelected ? AppColors.primaryDark : AppColors.textSecondary,
+                      ),
                     ),
                   ),
                 ],

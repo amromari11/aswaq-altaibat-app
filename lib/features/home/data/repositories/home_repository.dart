@@ -44,6 +44,21 @@ class HomeRepository {
     return _parseProducts(rows);
   }
 
+  /// Fallback for the home grid when there are no weekly offers to show —
+  /// otherwise the home screen would default to an empty state despite a
+  /// full catalog existing. Newest-first general browsing, not tied to any
+  /// promo flag.
+  Future<List<Product>> fetchLatestProducts({int limit = 20}) async {
+    final rows = await _client
+        .from('products')
+        .select()
+        .eq('is_active', true)
+        .order('created_at', ascending: false)
+        .limit(limit);
+
+    return _parseProducts(rows);
+  }
+
   Future<List<Product>> fetchByCategory(String categoryId, {int limit = 40}) async {
     final rows = await _client
         .from('products')

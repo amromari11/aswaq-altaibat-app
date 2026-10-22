@@ -31,7 +31,7 @@ class ProductCard extends ConsumerWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -67,7 +67,7 @@ class ProductCard extends ConsumerWidget {
                     Positioned.fill(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.45),
+                          color: Colors.black.withValues(alpha: 0.45),
                           borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(16),
                           ),
@@ -181,17 +181,22 @@ class _QuantityStepper extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (disabled) return const SizedBox.shrink();
 
+    void handleAdd() {
+      final added = ref.read(cartProvider.notifier).add(product);
+      if (!added) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('الكمية المتوفرة من "${product.nameAr}" هي ${product.stockQuantity} فقط.')),
+        );
+      }
+    }
+
     if (quantity == 0) {
-      return _StepperButton(
-        icon: Icons.add,
-        onTap: () => ref.read(cartProvider.notifier).add(product),
-        filled: true,
-      );
+      return _StepperButton(icon: Icons.add, onTap: handleAdd, filled: true);
     }
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: AppColors.accent,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -209,10 +214,7 @@ class _QuantityStepper extends ConsumerWidget {
               style: AppTextStyles.bodyMedium.copyWith(color: Colors.white),
             ),
           ),
-          _StepperButton(
-            icon: Icons.add,
-            onTap: () => ref.read(cartProvider.notifier).add(product),
-          ),
+          _StepperButton(icon: Icons.add, onTap: handleAdd),
         ],
       ),
     );
@@ -241,7 +243,7 @@ class _StepperButton extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: AppColors.accent,
         borderRadius: BorderRadius.circular(10),
       ),
       child: button,

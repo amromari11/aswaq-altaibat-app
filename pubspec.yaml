@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # Backend
   supabase_flutter: ^2.5.6
@@ -31,7 +33,22 @@ dependencies:
   smooth_page_indicator: ^1.1.0
 
   # Formatting
-  intl: ^0.19.0
+  intl: ^0.20.3 # version pinned by flutter_localizations' own constraint
+
+  # Abandoned-cart local reminder
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4
+
+  # Delivery location picker (Google Maps based)
+  google_maps_flutter: ^2.9.0
+  geocoding: ^3.0.0
+
+  # Shared by both location pickers
+  geolocator: ^10.1.0
+
+  # OpenStreetMap-based alternative picker (no Google Maps API key needed)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
 
   cupertino_icons: ^1.0.8
 

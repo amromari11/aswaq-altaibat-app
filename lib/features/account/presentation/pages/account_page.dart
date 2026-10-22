@@ -44,7 +44,15 @@ class AccountPage extends ConsumerWidget {
                   : 'عضو في أسواق الطيبات',
               style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.location_on_outlined, color: AppColors.primary),
+              title: const Text('عناوين التوصيل'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => context.push('/addresses'),
+            ),
+            const SizedBox(height: 8),
             if (user == null)
               ElevatedButton(
                 onPressed: () => context.go('/login'),

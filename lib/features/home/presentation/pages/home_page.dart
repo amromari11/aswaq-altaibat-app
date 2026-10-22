@@ -9,10 +9,13 @@ import '../../domain/entities/product.dart';
 import '../providers/home_providers.dart';
 import '../widgets/banner_carousel.dart';
 import '../widgets/category_bubble_row.dart';
+import '../widgets/home_brand_bar.dart';
 import '../widgets/home_search_bar.dart';
 import '../widgets/location_header.dart';
 import '../widgets/order_again_row.dart';
 import '../widgets/product_grid.dart';
+import '../../../recommendations/presentation/providers/recommendations_providers.dart';
+import '../../../recommendations/presentation/widgets/recommendations_row.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -28,7 +31,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
-        SliverToBoxAdapter(child: _buildHeader(context)),
+        const SliverToBoxAdapter(child: HomeBrandBar()),
+        SliverToBoxAdapter(child: _buildHeader()),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
           sliver: SliverList(
@@ -38,11 +42,9 @@ class _HomePageState extends ConsumerState<HomePage> {
               _buildCategories(),
               const SizedBox(height: 24),
               _buildOrderAgain(),
-              _SectionHeader(
-                title: _selectedCategoryId == null ? 'عروض هذا الأسبوع' : 'المنتجات',
-              ),
-              const SizedBox(height: 12),
-              _buildProductGrid(),
+              _buildProductSection(),
+              const SizedBox(height: 24),
+              RecommendationsRow(title: 'قد يعجبك أيضاً', provider: homeRecommendationsProvider),
             ]),
           ),
         ),
@@ -50,16 +52,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader() {
     return ClipPath(
       clipper: const CurvedHeaderClipper(),
       child: Container(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          MediaQuery.of(context).padding.top + 12,
-          16,
-          40,
-        ),
+        // Top inset is handled by HomeBrandBar above this, not here.
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         decoration: const BoxDecoration(gradient: AppColors.headerGradient),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,29 +134,64 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildProductGrid() {
+  /// Section header + grid together, because which title applies depends on
+  /// the same branching (search / category / offers-vs-fallback) that picks
+  /// the grid's data source — keeping them in one method avoids the two
+  /// drifting out of sync.
+  Widget _buildProductSection() {
     final query = ref.watch(searchQueryProvider);
     if (query.trim().isNotEmpty) {
-      return ref.watch(searchResultsProvider).when(
-            data: (products) => _productGridOrEmpty(products, 'لا توجد نتائج لبحثك.'),
-            loading: () => const _ShimmerGrid(),
-            error: (_, __) => const _ErrorMessage(),
-          );
+      return _productSection(
+        title: 'نتائج البحث',
+        asyncProducts: ref.watch(searchResultsProvider),
+        emptyMessage: 'لا توجد نتائج لبحثك.',
+      );
     }
 
     if (_selectedCategoryId != null) {
-      return ref.watch(categoryProductsProvider(_selectedCategoryId!)).when(
-            data: (products) => _productGridOrEmpty(products, 'لا توجد منتجات في هذا القسم.'),
-            loading: () => const _ShimmerGrid(),
-            error: (_, __) => const _ErrorMessage(),
-          );
+      return _productSection(
+        title: 'المنتجات',
+        asyncProducts: ref.watch(categoryProductsProvider(_selectedCategoryId!)),
+        emptyMessage: 'لا توجد منتجات في هذا القسم.',
+      );
     }
 
-    return ref.watch(weeklyOffersProvider).when(
-          data: (products) => _productGridOrEmpty(products, 'لا توجد عروض حالياً.'),
+    final weeklyOffers = ref.watch(weeklyOffersProvider);
+
+    // No weekly offers configured yet — fall back to general browsing so
+    // the catalog is still visible by default instead of an empty state.
+    if (weeklyOffers.hasValue && weeklyOffers.value!.isEmpty) {
+      return _productSection(
+        title: 'تصفح منتجاتنا',
+        asyncProducts: ref.watch(latestProductsProvider),
+        emptyMessage: 'لا توجد منتجات حالياً.',
+      );
+    }
+
+    return _productSection(
+      title: 'عروض هذا الأسبوع',
+      asyncProducts: weeklyOffers,
+      emptyMessage: 'لا توجد عروض حالياً.',
+    );
+  }
+
+  Widget _productSection({
+    required String title,
+    required AsyncValue<List<Product>> asyncProducts,
+    required String emptyMessage,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(title: title),
+        const SizedBox(height: 12),
+        asyncProducts.when(
+          data: (products) => _productGridOrEmpty(products, emptyMessage),
           loading: () => const _ShimmerGrid(),
           error: (_, __) => const _ErrorMessage(),
-        );
+        ),
+      ],
+    );
   }
 
   Widget _productGridOrEmpty(List<Product> products, String emptyMessage) {
