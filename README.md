@@ -7,7 +7,7 @@ project in `../aswaq-altaibat-backend`.
 
 This is the initial scaffold: project structure, theming, routing, and a
 fully wired Home screen (categories, weekly offers, order-again, sponsored
-banners, cart) plus Login/OTP screens. Checkout, full category browsing,
+banners, cart) plus a Google sign-in screen. Checkout, full category browsing,
 order history, and account details beyond sign-out are stubbed — see the
 `// TODO` comments in `lib/features/*`.
 
@@ -50,9 +50,22 @@ real data:
    carousel**, or it'll just show no banners (handled gracefully, not a
    crash — `homeBannersProvider`'s error state renders nothing).
 
-Phone/OTP auth additionally needs Authentication → Providers → Phone
-enabled in the Supabase dashboard with an SMS provider configured — without
-that, `sendOtp` will fail with a clear error on the login screen.
+Sign-in is Google only (SMS OTP was dropped for cost). It needs:
+- Authentication → Providers → Google enabled in Supabase, with a Google
+  Cloud OAuth client ID/secret (authorized redirect URI:
+  `https://<project-ref>.supabase.co/auth/v1/callback`).
+- Authentication → URL Configuration → Redirect URLs containing
+  `com.aswaqaltaibat.app://login-callback` (iOS/Android) and the web
+  origin(s) you run on, e.g. `http://localhost:*/**`.
+- The same `com.aswaqaltaibat.app` scheme registered in
+  `ios/Runner/Info.plist` (CFBundleURLTypes) and
+  `android/app/src/main/AndroidManifest.xml` (intent-filter) — these
+  folders aren't committed, so re-add it after `flutter create .`.
+
+Phone numbers aren't verified: customers type the number twice (checkout or
+Account → رقم الهاتف), it must be a Jordanian mobile (077/078/079), and it's
+saved to `profiles.phone_number`, which the admin dashboard's orders page
+shows.
 
 ## Project structure
 
@@ -61,7 +74,7 @@ lib/
   core/             # Shared: theme, router, Supabase client, widgets, utils
   features/
     splash/
-    auth/           # Phone/OTP login, guest mode
+    auth/           # Google sign-in, guest mode
     home/           # Home screen: categories, products, banners, search
     cart/           # Client-side cart state (not persisted until checkout)
     sponsors/       # Sponsored banners & promoted products (retail media)

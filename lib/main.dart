@@ -58,23 +58,32 @@ class AswaqAltaibatApp extends ConsumerWidget {
     // Alive for the app's lifetime — see the provider's own doc comment.
     ref.watch(cartAbandonmentWatcherProvider);
 
-    // Sign-in during the session pulls the user's saved cart down from
-    // Supabase (the already-authenticated-at-launch case is handled once in
-    // main(), above) and — this is the single place that navigates after a
-    // successful sign-in, for every auth method (phone OTP, Google, any
-    // future one) — returns to whatever screen sent the user to /login in
-    // the first place (e.g. checkout), via pendingRedirectProvider, or
-    // /home if they got to /login on their own. The login/OTP pages
-    // themselves don't navigate on success; they just wait for this.
-    // Sign-out clears local cart state only, without touching the saved
-    // server-side cart.
+    // Sign-in during the session merges the guest's cart and addresses into
+    // the account (the already-authenticated-at-launch case is handled once
+    // in main(), above). This is also the single place that navigates after
+    // a successful sign-in, for every auth method (Google today, any future
+    // one); the login page itself just waits for this.
+    //
+    // /login is always *pushed* (from checkout's "تأكيد الطلب" or the
+    // account tab), so popping it returns to that exact screen with its
+    // state intact — a guest lands back on their filled-in checkout. Only if
+    // there's nothing to pop (e.g. web, where the OAuth redirect reloads the
+    // page) does it fall back to pendingRedirectProvider or /home.
+    // Sign-out clears local cart/address state only, without touching the
+    // saved server-side copies.
     ref.listen<User?>(currentUserProvider, (previous, next) {
       if (previous == null && next != null) {
         ref.read(cartProvider.notifier).hydrateFromServer();
         ref.read(savedAddressesProvider.notifier).hydrateFromServer();
         final redirectTo = ref.read(pendingRedirectProvider);
         ref.read(pendingRedirectProvider.notifier).state = null;
-        ref.read(appRouterProvider).go(redirectTo ?? '/home');
+        final router = ref.read(appRouterProvider);
+        final onLogin = router.routerDelegate.currentConfiguration.uri.path == '/login';
+        if (onLogin && router.canPop()) {
+          router.pop();
+        } else if (onLogin) {
+          router.go(redirectTo ?? '/home');
+        }
       } else if (previous != null && next == null) {
         ref.read(cartProvider.notifier).clearLocalOnly();
         ref.read(savedAddressesProvider.notifier).clearLocalOnly();

@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/supabase/supabase_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../recommendations/presentation/providers/recommendations_providers.dart';
 import '../../../recommendations/presentation/widgets/recommendations_row.dart';
 import '../../../sponsors/presentation/widgets/sponsored_badge.dart';
@@ -143,23 +141,9 @@ class CartPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
-                        onPressed: () {
-                          // isMockSignedInProvider (debug-only test
-                          // sign-in) counts as signed in for navigation,
-                          // but it isn't a real Supabase session — placing
-                          // the order still needs one.
-                          final isSignedIn = ref.read(currentUserProvider) != null ||
-                              ref.read(isMockSignedInProvider);
-                          if (isSignedIn) {
-                            context.push('/checkout');
-                            return;
-                          }
-                          // Remembered so the app-level sign-in listener
-                          // (main.dart) sends the user straight back here —
-                          // not just /home — once they actually sign in.
-                          ref.read(pendingRedirectProvider.notifier).state = '/checkout';
-                          context.push('/login');
-                        },
+                        // Guests go through checkout too; sign-in is only
+                        // asked for when they confirm the order.
+                        onPressed: () => context.push('/checkout'),
                         child: const Text('متابعة الطلب'),
                       ),
                     ],

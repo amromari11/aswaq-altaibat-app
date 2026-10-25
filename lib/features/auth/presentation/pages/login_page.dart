@@ -18,45 +18,8 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  final _phoneController = TextEditingController();
-  bool _isSubmittingPhone = false;
   bool _isSubmittingGoogle = false;
   String? _errorMessage;
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _sendOtp() async {
-    final rawPhone = _phoneController.text.trim();
-    if (rawPhone.isEmpty) {
-      setState(() => _errorMessage = 'الرجاء إدخال رقم الهاتف.');
-      return;
-    }
-
-    // Jordanian mobile numbers: accept "07XXXXXXXX" or "+9627XXXXXXXX" and
-    // normalize to E.164, which Supabase phone auth requires.
-    final normalized = rawPhone.startsWith('+')
-        ? rawPhone
-        : '+962${rawPhone.startsWith('0') ? rawPhone.substring(1) : rawPhone}';
-
-    setState(() {
-      _isSubmittingPhone = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await ref.read(authRepositoryProvider).sendOtp(normalized);
-      if (!mounted) return;
-      context.push('/verify-otp', extra: normalized);
-    } catch (error) {
-      setState(() => _errorMessage = 'تعذر إرسال الرمز. حاول مرة أخرى.');
-    } finally {
-      if (mounted) setState(() => _isSubmittingPhone = false);
-    }
-  }
 
   Future<void> _signInWithGoogle() async {
     setState(() {
@@ -70,8 +33,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       // it up via onAuthStateChange. Either way, no manual navigation here —
       // the app-level listener in main.dart does it once sign-in actually
       // completes. Requires Google configured under Authentication →
-      // Providers in Supabase, plus a redirect URL registered on each
-      // platform — see the TODO on AuthRepository.signInWithGoogle.
+      // Providers in Supabase, plus the redirect URL registered on each
+      // platform — see AuthRepository.signInWithGoogle.
       await ref.read(authRepositoryProvider).signInWithGoogle();
     } catch (error) {
       setState(() => _errorMessage = 'تعذر تسجيل الدخول عبر Google. حاول مرة أخرى.');
@@ -80,17 +43,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
-  void _browseAsGuest() {
-    ref.read(isGuestProvider.notifier).state = true;
-    context.go('/home');
+  /// Back to wherever the login was opened from (checkout or the account
+  /// tab) — browsing never requires an account.
+  void _continueShopping() {
+    ref.read(pendingRedirectProvider.notifier).state = null;
+    ref.read(resumeCheckoutAfterSignInProvider.notifier).state = false;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/home');
+    }
   }
 
   /// Debug-only (see the `kDebugMode` gate in build()): skips Supabase Auth
   /// entirely — just flips [isMockSignedInProvider] and jumps straight to
   /// Checkout, so the checkout/location-picker UI (cart summary, address
-  /// entry, the OSM map) can be reached and tested instantly, without phone
-  /// OTP (no SMS provider configured) or Google (not set up), and without
-  /// Supabase's email-confirmation flow getting in the way.
+  /// entry, phone entry, the OSM map) can be reached and tested instantly
+  /// without a configured Google provider.
   ///
   /// This is **not** a real sign-in: `currentUserProvider` (Supabase's
   /// actual `auth.uid()`) stays null, so RLS still refuses to let "تأكيد
@@ -98,7 +67,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   /// real session. See the caption under the button below.
   void _mockSignInAndGoToCheckout() {
     ref.read(isMockSignedInProvider.notifier).state = true;
-    context.go('/checkout');
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/checkout');
+    }
   }
 
   @override
@@ -137,48 +110,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               Text('تسجيل الدخول', style: AppTextStyles.h2),
               const SizedBox(height: 6),
               Text(
-                'أدخل رقم هاتفك لإرسال رمز التحقق',
+                ref.read(pendingRedirectProvider) == '/checkout'
+                    ? 'خطوة أخيرة: سجّل الدخول بحساب Google لتأكيد طلبك ومتابعته.'
+                    : 'سجّل الدخول بحساب Google لإتمام طلباتك ومتابعتها.',
                 style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(
-                  hintText: '07XX XXX XXX',
-                  prefixIcon: Padding(
-                    padding: EdgeInsets.all(14),
-                    child: Text('+962', style: TextStyle(color: AppColors.textSecondary)),
-                  ),
-                  prefixIconConstraints: BoxConstraints(minWidth: 0),
-                ),
-              ),
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 8),
-                Text(_errorMessage!, style: AppTextStyles.caption.copyWith(color: AppColors.error)),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _isSubmittingPhone ? null : _sendOtp,
-                child: _isSubmittingPhone
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('إرسال الرمز'),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  const Expanded(child: Divider(color: AppColors.border)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('أو', style: AppTextStyles.caption),
-                  ),
-                  const Expanded(child: Divider(color: AppColors.border)),
-                ],
               ),
               const SizedBox(height: 24),
               OutlinedButton(
@@ -210,11 +145,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ],
                       ),
               ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(_errorMessage!, style: AppTextStyles.caption.copyWith(color: AppColors.error)),
+              ],
               const SizedBox(height: 20),
               TextButton(
-                onPressed: _browseAsGuest,
+                onPressed: _continueShopping,
                 child: Text(
-                  'التصفح كزائر',
+                  'متابعة التسوق',
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primaryDark),
                 ),
               ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthRepository {
@@ -5,34 +6,28 @@ class AuthRepository {
 
   final SupabaseClient _client;
 
-  /// Sends an SMS OTP to [phone] (E.164 format, e.g. +9627XXXXXXXX).
-  /// Requires phone auth to be enabled with an SMS provider configured in
-  /// the Supabase dashboard (Authentication → Providers → Phone) — this
-  /// call will fail until that's set up.
-  Future<void> sendOtp(String phone) {
-    return _client.auth.signInWithOtp(phone: phone);
-  }
+  /// Deep link the OAuth flow returns to on iOS/Android. Must be registered
+  /// in three places: Supabase dashboard → Authentication → URL
+  /// Configuration → Redirect URLs, `CFBundleURLTypes` in
+  /// ios/Runner/Info.plist, and an intent-filter in
+  /// android/app/src/main/AndroidManifest.xml. supabase_flutter picks the
+  /// link up itself (via app_links) and completes the session.
+  static const mobileRedirectUrl = 'com.aswaqaltaibat.app://login-callback';
 
-  Future<AuthResponse> verifyOtp({
-    required String phone,
-    required String token,
-  }) {
-    return _client.auth.verifyOTP(
-      type: OtpType.sms,
-      phone: phone,
-      token: token,
-    );
-  }
-
-  /// Requires Google enabled under Authentication → Providers in the
-  /// Supabase dashboard (with a Google Cloud OAuth client ID/secret), plus
-  /// platform redirect setup this app doesn't have yet: a custom URL scheme
-  /// registered in `ios/Runner/Info.plist` and an intent-filter in
-  /// `android/app/src/main/AndroidManifest.xml` so the OAuth redirect can
-  /// return to the app. Without both, this call will fail or strand the
-  /// user in the browser after sign-in.
+  /// Google is the only sign-in method (SMS OTP was dropped for cost).
+  /// Requires Google enabled under Authentication → Providers in Supabase,
+  /// with a Google Cloud OAuth client ID/secret.
+  ///
+  /// Returns once the browser has opened — the session arrives later via
+  /// onAuthStateChange (main.dart's listener navigates on sign-in). On web
+  /// the page itself redirects away and back, so in-memory state (a guest
+  /// cart, the pending redirect) doesn't survive the round trip.
   Future<bool> signInWithGoogle() {
-    return _client.auth.signInWithOAuth(OAuthProvider.google);
+    return _client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: kIsWeb ? Uri.base.origin : mobileRedirectUrl,
+      authScreenLaunchMode: kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+    );
   }
 
   Future<void> signOut() => _client.auth.signOut();

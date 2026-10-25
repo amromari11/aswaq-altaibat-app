@@ -3,20 +3,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/constants/brand_assets.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
-/// Branded splash shown while the app decides where to route (signed in /
-/// guest / needs login).
+/// Branded splash: the delivery-scooter animation and the store slogan,
+/// then straight into the app. Everyone lands on /home — browsing needs no
+/// account; sign-in is only asked for when placing an order (checkout).
 ///
 /// The animation is streamed from LottieFiles' public asset CDN rather than
 /// bundled — see BrandAssets.fastDeliveryLottieUrl for how it was verified.
 /// If LottieFiles ever moves/removes this asset, `errorBuilder` below falls
 /// back to a static brand mark instead of a blank screen.
 const _splashDuration = Duration(milliseconds: 2500);
+
+const slogan = 'أسواق الطيبات: جودة تختارها، وسرعة تعتمد عليها.';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -45,23 +47,8 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     super.initState();
     Timer(_splashDuration, () {
       if (!mounted) return;
-      // supabase_flutter restores a persisted session (if any) by the time
-      // Supabase.initialize() in main() returns, well before this timer
-      // fires — so a returning signed-in user goes straight to /home
-      // instead of being forced through /login every cold start.
-      context.go(_isSignedIn() ? '/home' : '/login');
+      context.go('/home');
     });
-  }
-
-  bool _isSignedIn() {
-    try {
-      return Supabase.instance.client.auth.currentUser != null;
-    } catch (_) {
-      // Supabase.instance throws if .initialize() was never called for this
-      // process — only happens in the widget-test harness, which
-      // deliberately skips it to avoid a network dependency.
-      return false;
-    }
   }
 
   @override
@@ -110,6 +97,21 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
                   decoration: BoxDecoration(
                     color: AppColors.accent,
                     borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  // Break after the colon so it reads as brand + promise
+                  // rather than wrapping one word onto its own line.
+                  child: Text(
+                    slogan.replaceFirst(': ', ':\n'),
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 16,
+                      height: 1.6,
+                    ),
                   ),
                 ),
               ],

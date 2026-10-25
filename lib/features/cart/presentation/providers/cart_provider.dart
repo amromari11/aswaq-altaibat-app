@@ -100,17 +100,37 @@ class CartNotifier extends StateNotifier<Map<String, CartItem>> {
 
   int quantityOf(String productId) => state[productId]?.quantity ?? 0;
 
-  /// Replaces local state with the signed-in user's saved cart from
-  /// Supabase. Called on sign-in (including an already-authenticated app
-  /// launch) so a cart started on another device or a previous session
-  /// reappears. Any local guest-cart items added just before signing in are
-  /// discarded in favor of the server copy.
-  Future<void> hydrateFromServer() async {
+  /// Merges the signed-in user's saved cart from Supabase into local state.
+  /// Called on sign-in (including an already-authenticated app launch) so a
+  /// cart started on another device or a previous session reappears.
+  ///
+  /// Sign-in now happens at the *end* of checkout, so the local cart is
+  /// usually the guest cart the customer is about to order — it must
+  /// survive. Local lines win over server lines for the same product (they're
+  /// the latest choice) and are written back so the server copy matches.
+  Future<void> hydrateFromServer() => _hydration = _hydrate();
+
+  /// Completes when the latest [hydrateFromServer] has finished, so a
+  /// checkout resumed right after sign-in places the order only once the
+  /// merged cart has been written back (otherwise a late write-back could
+  /// re-add the just-ordered items after the order clears the cart).
+  Future<void> get hydrationDone => _hydration ?? Future.value();
+  Future<void>? _hydration;
+
+  Future<void> _hydrate() async {
     final userId = _userId;
     if (userId == null) return;
     try {
-      final items = await _repository.fetchCart(userId);
-      state = {for (final item in items) item.product.id: item};
+      final serverItems = await _repository.fetchCart(userId);
+      final local = state;
+      state = {
+        for (final item in serverItems) item.product.id: item,
+        ...local,
+      };
+      await Future.wait([
+        for (final item in local.values)
+          _repository.upsertItem(userId, item.product.id, item.quantity).catchError((_) {}),
+      ]);
     } catch (_) {
       // Persistence is a convenience, not the source of truth for the
       // current session — keep whatever local state already exists.

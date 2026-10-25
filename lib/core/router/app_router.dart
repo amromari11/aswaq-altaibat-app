@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/pages/account_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
-import '../../features/auth/presentation/pages/otp_verify_page.dart';
 import '../../features/cart/presentation/pages/cart_page.dart';
 import '../../features/cart/presentation/pages/checkout_page.dart';
 import '../../features/categories/presentation/pages/categories_page.dart';
@@ -24,10 +23,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashPage()),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
-      GoRoute(
-        path: '/verify-otp',
-        builder: (context, state) => OtpVerifyPage(phone: state.extra as String),
-      ),
       GoRoute(path: '/cart', builder: (context, state) => const CartPage()),
       GoRoute(path: '/checkout', builder: (context, state) => const CheckoutPage()),
       GoRoute(

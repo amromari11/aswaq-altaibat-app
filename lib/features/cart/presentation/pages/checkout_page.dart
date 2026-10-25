@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show User;
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/supabase/supabase_providers.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/utils/jordan_phone.dart';
+import '../../../account/data/repositories/profile_repository.dart';
+import '../../../account/presentation/providers/profile_providers.dart';
+import '../../../account/presentation/widgets/phone_entry_fields.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../location/presentation/providers/location_providers.dart';
 import '../providers/cart_provider.dart';
 import '../providers/checkout_provider.dart';
@@ -19,15 +26,54 @@ class CheckoutPage extends ConsumerStatefulWidget {
 
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   final _notesController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _phoneConfirmController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  /// True when the customer tapped "تغيير" on their saved phone. A customer
+  /// with no saved phone always sees the entry fields.
+  bool _changingPhone = false;
+  bool _savingPhone = false;
 
   @override
   void dispose() {
     _notesController.dispose();
+    _phoneController.dispose();
+    _phoneConfirmController.dispose();
     super.dispose();
   }
 
-  Future<void> _confirmOrder() async {
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Saves a newly entered phone to the profile before the order is placed.
+  /// Returns false (after telling the user why) if the order shouldn't go
+  /// ahead. Without a real session (the debug mock sign-in) there's nowhere
+  /// to save it; placeOrder then reports "sign in" as before.
+  Future<bool> _savePhoneIfEntered({required bool entering}) async {
+    if (!entering) return true;
+    if (!_formKey.currentState!.validate()) return false;
+    final phone = JordanPhone.normalize(_phoneController.text)!;
+    if (ref.read(currentUserProvider) == null) return true;
+
+    setState(() => _savingPhone = true);
+    try {
+      await savePhone(ref, phone);
+      if (mounted) setState(() => _changingPhone = false);
+      return true;
+    } on PhoneTakenException {
+      _showMessage('رقم الهاتف هذا مسجل لحساب آخر. أدخل رقماً مختلفاً.');
+      return false;
+    } catch (_) {
+      _showMessage('تعذر حفظ رقم الهاتف. تحقق من الاتصال وحاول مرة أخرى.');
+      return false;
+    } finally {
+      if (mounted) setState(() => _savingPhone = false);
+    }
+  }
+
+  Future<void> _confirmOrder({required bool enteringPhone}) async {
     final address = ref.read(selectedAddressProvider);
     final zone = ref.read(selectedZoneProvider);
     if (address == null || zone == null) {
@@ -42,6 +88,22 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       );
       return;
     }
+
+    // Guests fill in everything first; sign-in is only asked for now, at
+    // the very end. The login page is pushed on top of this one, so this
+    // page's state (selected address, typed phone) is still here when
+    // main.dart's sign-in listener pops back to it.
+    final isSignedIn = ref.read(currentUserProvider) != null || ref.read(isMockSignedInProvider);
+    if (!isSignedIn) {
+      if (enteringPhone && !_formKey.currentState!.validate()) return;
+      ref.read(pendingRedirectProvider.notifier).state = '/checkout';
+      ref.read(resumeCheckoutAfterSignInProvider.notifier).state = true;
+      context.push('/login');
+      return;
+    }
+
+    if (!await _savePhoneIfEntered(entering: enteringPhone)) return;
+    if (!mounted) return;
 
     final orderId = await ref.read(checkoutControllerProvider.notifier).placeOrder(
           deliveryAddress: '${zone.nameAr} - ${address.details}',
@@ -95,7 +157,34 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final belowMinimum = zone != null && subtotal < zone.minOrderJod;
     final total = subtotal + deliveryFee;
     final checkoutState = ref.watch(checkoutControllerProvider);
-    final isSubmitting = checkoutState.isLoading;
+    final phoneAsync = ref.watch(profilePhoneProvider);
+    final savedPhone = phoneAsync.valueOrNull;
+    final enteringPhone = !phoneAsync.isLoading && (savedPhone == null || _changingPhone);
+    final isSubmitting = checkoutState.isLoading || _savingPhone;
+
+    // Back from sign-in that this page's confirm button asked for: finish
+    // the order with what the customer already entered, instead of making
+    // them tap "تأكيد الطلب" a second time. Runs after the frame so
+    // main.dart's listener has popped the login page first. The phone they
+    // typed as a guest is the latest one they confirmed, so it's saved to
+    // the account even if the account already had a different number.
+    ref.listen<User?>(currentUserProvider, (previous, next) {
+      if (previous != null || next == null) return;
+      if (!ref.read(resumeCheckoutAfterSignInProvider)) return;
+      ref.read(resumeCheckoutAfterSignInProvider.notifier).state = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        _showMessage('تم تسجيل الدخول — جارٍ تأكيد طلبك...');
+        // main.dart started merging the guest cart/addresses into the
+        // account; wait for that before ordering (see hydrationDone).
+        await Future.wait([
+          ref.read(cartProvider.notifier).hydrationDone,
+          ref.read(savedAddressesProvider.notifier).hydrationDone,
+        ]);
+        if (!mounted) return;
+        await _confirmOrder(enteringPhone: _phoneController.text.trim().isNotEmpty);
+      });
+    });
 
     ref.listen<AsyncValue<void>>(checkoutControllerProvider, (previous, next) {
       final error = next.error;
@@ -140,6 +229,30 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   'الحد الأدنى للطلب في ${zone.nameAr} هو ${CurrencyFormatter.jod(zone.minOrderJod)}.',
                   style: AppTextStyles.caption.copyWith(color: AppColors.accent),
                 ),
+              ),
+            const SizedBox(height: 20),
+            Text('رقم الهاتف', style: AppTextStyles.h3),
+            const SizedBox(height: 4),
+            Text(
+              'سيتصل بك السائق على هذا الرقم عند التوصيل.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            if (phoneAsync.isLoading)
+              const LinearProgressIndicator()
+            else if (!enteringPhone)
+              _SavedPhoneTile(
+                phone: JordanPhone.toLocal(savedPhone!),
+                onChange: () => setState(() {
+                  _changingPhone = true;
+                  _phoneController.clear();
+                  _phoneConfirmController.clear();
+                }),
+              )
+            else
+              PhoneEntryFields(
+                phoneController: _phoneController,
+                confirmController: _phoneConfirmController,
               ),
             const SizedBox(height: 20),
             Text('ملاحظات (اختياري)', style: AppTextStyles.h3),
@@ -199,7 +312,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: isSubmitting || items.isEmpty || belowMinimum ? null : _confirmOrder,
+              onPressed: isSubmitting || items.isEmpty || belowMinimum || phoneAsync.isLoading
+                  ? null
+                  : () => _confirmOrder(enteringPhone: enteringPhone),
               child: isSubmitting
                   ? const SizedBox(
                       width: 22,
@@ -286,6 +401,34 @@ class _AddressSelector extends StatelessWidget {
                   Text('الوقت المتوقع ~$eta دقيقة', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
               ],
             ),
+          ),
+          TextButton(onPressed: onChange, child: const Text('تغيير')),
+        ],
+      ),
+    );
+  }
+}
+
+class _SavedPhoneTile extends StatelessWidget {
+  const _SavedPhoneTile({required this.phone, required this.onChange});
+
+  final String phone;
+  final VoidCallback onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.phone_outlined, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(phone, textDirection: TextDirection.ltr, textAlign: TextAlign.start, style: AppTextStyles.bodyMedium),
           ),
           TextButton(onPressed: onChange, child: const Text('تغيير')),
         ],

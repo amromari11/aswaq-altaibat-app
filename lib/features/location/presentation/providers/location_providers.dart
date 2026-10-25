@@ -85,13 +85,35 @@ class SavedAddressesNotifier extends StateNotifier<List<SavedAddress>> {
     if (removed != null) _sync(removed, (repo) => repo.delete(id));
   }
 
-  /// Replaces local state with the signed-in user's saved addresses. Called
-  /// on sign-in (and an already-authenticated launch), like the cart.
-  Future<void> hydrateFromServer() async {
+  /// Loads the signed-in user's saved addresses. Called on sign-in (and an
+  /// already-authenticated launch), like the cart.
+  ///
+  /// Sign-in happens at the end of checkout, so addresses a guest added on
+  /// this device are uploaded to their account first rather than dropped —
+  /// and if checkout had one of them selected, the selection follows it to
+  /// its new server id.
+  Future<void> hydrateFromServer() => _hydration = _hydrate();
+
+  /// Completes when the latest [hydrateFromServer] has finished — a checkout
+  /// resumed right after sign-in waits for it so the order references the
+  /// uploaded address's real id.
+  Future<void> get hydrationDone => _hydration ?? Future.value();
+  Future<void>? _hydration;
+
+  Future<void> _hydrate() async {
     final userId = _userId;
     if (userId == null) return;
     try {
+      final selectedId = _ref.read(selectedAddressIdProvider);
+      String? movedSelection;
+      for (final local in state.where((a) => !a.isPersisted)) {
+        final saved = await _repository.insert(userId, local);
+        if (local.id == selectedId) movedSelection = saved.id;
+      }
       state = await _repository.fetch(userId);
+      if (movedSelection != null) {
+        _ref.read(selectedAddressIdProvider.notifier).state = movedSelection;
+      }
     } catch (_) {
       // Keep local state; the list just won't reflect the server this time.
     }
