@@ -80,6 +80,8 @@ class CheckoutRepository {
     String paymentMethod = 'cash',
     String? notes,
     double? deliveryFeeOverride,
+    String? zoneId,
+    String? addressId,
   }) async {
     final subtotal = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
     final deliveryFee = subtotal >= AppConfig.freeDeliveryThresholdJod
@@ -101,6 +103,10 @@ class CheckoutRepository {
           if (deliveryLat != null) 'delivery_lat': deliveryLat,
           if (deliveryLng != null) 'delivery_lng': deliveryLng,
           'payment_method': paymentMethod,
+          // orders.zone_id / address_id (backend supabase/007) — for
+          // admin reporting; delivery_address above stays the snapshot.
+          if (zoneId != null) 'zone_id': zoneId,
+          if (addressId != null) 'address_id': addressId,
           if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
         })
         .select('id')

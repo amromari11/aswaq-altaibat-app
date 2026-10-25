@@ -63,7 +63,7 @@ class _AddressCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final zone = ref.watch(zonesRepositoryProvider).byId(address.zoneId);
+    final zone = ref.watch(zoneByIdProvider(address.zoneId));
     final notifier = ref.read(savedAddressesProvider.notifier);
 
     return Material(

@@ -13,6 +13,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/cart/presentation/providers/cart_abandonment_provider.dart';
 import 'features/cart/presentation/providers/cart_provider.dart';
+import 'features/location/presentation/providers/location_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,6 +43,7 @@ Future<void> main() async {
   final container = ProviderContainer();
   if (container.read(currentUserProvider) != null) {
     unawaited(container.read(cartProvider.notifier).hydrateFromServer());
+    unawaited(container.read(savedAddressesProvider.notifier).hydrateFromServer());
   }
 
   runApp(UncontrolledProviderScope(container: container, child: const AswaqAltaibatApp()));
@@ -69,11 +71,14 @@ class AswaqAltaibatApp extends ConsumerWidget {
     ref.listen<User?>(currentUserProvider, (previous, next) {
       if (previous == null && next != null) {
         ref.read(cartProvider.notifier).hydrateFromServer();
+        ref.read(savedAddressesProvider.notifier).hydrateFromServer();
         final redirectTo = ref.read(pendingRedirectProvider);
         ref.read(pendingRedirectProvider.notifier).state = null;
         ref.read(appRouterProvider).go(redirectTo ?? '/home');
       } else if (previous != null && next == null) {
         ref.read(cartProvider.notifier).clearLocalOnly();
+        ref.read(savedAddressesProvider.notifier).clearLocalOnly();
+        ref.read(selectedAddressIdProvider.notifier).state = null;
       }
     });
 

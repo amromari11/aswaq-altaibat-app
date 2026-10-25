@@ -33,6 +33,8 @@ class CheckoutController extends StateNotifier<AsyncValue<void>> {
     double? deliveryLng,
     String? notes,
     double? deliveryFee,
+    String? zoneId,
+    String? addressId,
   }) async {
     final user = _ref.read(currentUserProvider);
     if (user == null) {
@@ -65,6 +67,8 @@ class CheckoutController extends StateNotifier<AsyncValue<void>> {
             deliveryLng: deliveryLng,
             notes: notes,
             deliveryFeeOverride: deliveryFee,
+            zoneId: zoneId,
+            addressId: addressId,
           );
       _ref.read(cartProvider.notifier).clear();
       state = const AsyncValue.data(null);

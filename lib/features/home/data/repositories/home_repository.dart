@@ -13,7 +13,7 @@ class HomeRepository {
         .from('categories')
         .select()
         .eq('is_active', true)
-        .order('display_order');
+        .order('display_order', ascending: true);
 
     return (rows as List)
         .map((row) => Category.fromJson(row as Map<String, dynamic>))

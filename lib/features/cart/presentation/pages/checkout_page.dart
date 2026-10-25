@@ -49,6 +49,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           deliveryLng: address.longitude,
           notes: _notesController.text,
           deliveryFee: zone.deliveryFeeJod,
+          zoneId: zone.id,
+          // A local-only (guest) address has no server row to reference.
+          addressId: address.isPersisted ? address.id : null,
         );
 
     if (!mounted) return;

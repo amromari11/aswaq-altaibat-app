@@ -30,6 +30,7 @@ class _AddressFormPageState extends ConsumerState<AddressFormPage> {
   double? _lat;
   double? _lng;
   bool _makeDefault = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -60,26 +61,38 @@ class _AddressFormPageState extends ConsumerState<AddressFormPage> {
     });
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    ref.read(savedAddressesProvider.notifier).upsert(
-          SavedAddress(
-            id: widget.existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-            label: _labelController.text.trim(),
-            zoneId: _zoneId!,
-            details: _detailsController.text.trim(),
-            latitude: _lat,
-            longitude: _lng,
-            isDefault: _makeDefault,
-          ),
-        );
-    context.pop();
+    setState(() => _saving = true);
+    try {
+      final existing = widget.existing;
+      final address = SavedAddress(
+        id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+        label: _labelController.text.trim(),
+        zoneId: _zoneId!,
+        details: _detailsController.text.trim(),
+        latitude: _lat,
+        longitude: _lng,
+        isDefault: _makeDefault,
+      );
+      await ref
+          .read(savedAddressesProvider.notifier)
+          .upsert(existing == null ? address : address.copyWith(isPersisted: existing.isPersisted));
+      if (mounted) context.pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر حفظ العنوان. تحقق من الاتصال وحاول مرة أخرى.')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final zones = ref.watch(zonesProvider);
-    final zone = ref.watch(zonesRepositoryProvider).byId(_zoneId);
+    final zonesAsync = ref.watch(zonesProvider);
+    final zones = zonesAsync.valueOrNull ?? const [];
+    final zone = ref.watch(zoneByIdProvider(_zoneId));
     final isEditing = widget.existing != null;
 
     return Scaffold(
@@ -114,13 +127,19 @@ class _AddressFormPageState extends ConsumerState<AddressFormPage> {
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               initialValue: _zoneId,
-              hint: const Text('اختر المنطقة'),
+              hint: Text(zonesAsync.isLoading ? 'جارٍ تحميل المناطق...' : 'اختر المنطقة'),
               items: [
                 for (final z in zones) DropdownMenuItem(value: z.id, child: Text(z.nameAr)),
               ],
               onChanged: (value) => setState(() => _zoneId = value),
               validator: (v) => v == null ? 'الرجاء اختيار منطقة التوصيل.' : null,
             ),
+            if (zonesAsync.hasError)
+              TextButton.icon(
+                onPressed: () => ref.invalidate(zonesProvider),
+                icon: const Icon(Icons.refresh),
+                label: const Text('تعذر تحميل المناطق — إعادة المحاولة'),
+              ),
             if (zone != null) ...[
               const SizedBox(height: 10),
               Container(
@@ -163,7 +182,16 @@ class _AddressFormPageState extends ConsumerState<AddressFormPage> {
               title: const Text('تعيين كعنوان افتراضي'),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _save, child: const Text('حفظ العنوان')),
+            ElevatedButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('حفظ العنوان'),
+            ),
           ],
         ),
       ),

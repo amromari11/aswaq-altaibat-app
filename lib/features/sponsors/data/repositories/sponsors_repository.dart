@@ -13,7 +13,7 @@ class SponsorsRepository {
         .select()
         .eq('is_active', true)
         .eq('placement', placement)
-        .order('display_order');
+        .order('display_order', ascending: true);
 
     return (rows as List)
         .map((row) => SponsorBanner.fromJson(row as Map<String, dynamic>))
