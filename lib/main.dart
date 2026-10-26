@@ -64,9 +64,9 @@ class AswaqAltaibatApp extends ConsumerWidget {
     // a successful sign-in, for every auth method (Google today, any future
     // one); the login page itself just waits for this.
     //
-    // /login is always *pushed* (from checkout's "تأكيد الطلب" or the
-    // account tab), so popping it returns to that exact screen with its
-    // state intact — a guest lands back on their filled-in checkout. Only if
+    // /login is always *pushed* (from checkout's optional "سجّل الدخول" link
+    // or the account tab), so popping it returns to that exact screen with
+    // its state intact. Only if
     // there's nothing to pop (e.g. web, where the OAuth redirect reloads the
     // page) does it fall back to pendingRedirectProvider or /home.
     // Sign-out clears local cart/address state only, without touching the

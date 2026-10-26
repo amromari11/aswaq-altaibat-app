@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show User;
 
 import '../../../../core/config/app_config.dart';
+import '../../../../core/supabase/supabase_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/supabase/supabase_providers.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/jordan_phone.dart';
-import '../../../account/data/repositories/profile_repository.dart';
+import '../../../account/domain/entities/customer_info.dart';
+import '../../../account/presentation/providers/customer_info_provider.dart';
 import '../../../account/presentation/providers/profile_providers.dart';
 import '../../../account/presentation/widgets/phone_entry_fields.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../location/presentation/providers/location_providers.dart';
+import '../../data/repositories/checkout_repository.dart';
 import '../providers/cart_provider.dart';
 import '../providers/checkout_provider.dart';
 
@@ -26,18 +26,20 @@ class CheckoutPage extends ConsumerStatefulWidget {
 
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   final _notesController = TextEditingController();
+  final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _phoneConfirmController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  /// True when the customer tapped "تغيير" on their saved phone. A customer
-  /// with no saved phone always sees the entry fields.
-  bool _changingPhone = false;
-  bool _savingPhone = false;
+  /// True when the customer tapped "تغيير" on their remembered details. With
+  /// nothing remembered the entry fields are always shown.
+  bool _editingCustomer = false;
+  bool _namePrefilled = false;
 
   @override
   void dispose() {
     _notesController.dispose();
+    _nameController.dispose();
     _phoneController.dispose();
     _phoneConfirmController.dispose();
     super.dispose();
@@ -47,70 +49,58 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Saves a newly entered phone to the profile before the order is placed.
-  /// Returns false (after telling the user why) if the order shouldn't go
-  /// ahead. Without a real session (the debug mock sign-in) there's nowhere
-  /// to save it; placeOrder then reports "sign in" as before.
-  Future<bool> _savePhoneIfEntered({required bool entering}) async {
-    if (!entering) return true;
-    if (!_formKey.currentState!.validate()) return false;
-    final phone = JordanPhone.normalize(_phoneController.text)!;
-    if (ref.read(currentUserProvider) == null) return true;
-
-    setState(() => _savingPhone = true);
-    try {
-      await savePhone(ref, phone);
-      if (mounted) setState(() => _changingPhone = false);
-      return true;
-    } on PhoneTakenException {
-      _showMessage('رقم الهاتف هذا مسجل لحساب آخر. أدخل رقماً مختلفاً.');
-      return false;
-    } catch (_) {
-      _showMessage('تعذر حفظ رقم الهاتف. تحقق من الاتصال وحاول مرة أخرى.');
-      return false;
-    } finally {
-      if (mounted) setState(() => _savingPhone = false);
-    }
+  /// The Google account's display name, if signed in with one.
+  String? _googleName() {
+    final meta = ref.read(currentUserProvider)?.userMetadata ?? const {};
+    final name = (meta['full_name'] ?? meta['name']) as String?;
+    return (name == null || name.trim().isEmpty) ? null : name.trim();
   }
 
-  Future<void> _confirmOrder({required bool enteringPhone}) async {
+  /// Name + phone already known for this customer, so they don't retype them:
+  /// what this device last ordered with, else a signed-in user's Google name
+  /// plus the phone saved on their profile. Null if either piece is missing.
+  CustomerInfo? _savedCustomer() {
+    final remembered = ref.watch(customerInfoProvider).valueOrNull;
+    if (remembered != null) return remembered;
+    final phone = ref.watch(profilePhoneProvider).valueOrNull;
+    final name = ref.watch(currentUserProvider) == null ? null : _googleName();
+    if (name != null && phone != null) return CustomerInfo(name: name, phone: phone);
+    return null;
+  }
+
+  Future<void> _confirmOrder({required CustomerInfo? saved, required bool entering}) async {
     final address = ref.read(selectedAddressProvider);
     final zone = ref.read(selectedZoneProvider);
     if (address == null || zone == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرجاء اختيار عنوان التوصيل.')),
-      );
+      _showMessage('الرجاء اختيار عنوان التوصيل.');
       return;
     }
     if (ref.read(cartSubtotalProvider) < zone.minOrderJod) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('الحد الأدنى للطلب في ${zone.nameAr} هو ${CurrencyFormatter.jod(zone.minOrderJod)}.')),
+      _showMessage('الحد الأدنى للطلب في ${zone.nameAr} هو ${CurrencyFormatter.jod(zone.minOrderJod)}.');
+      return;
+    }
+
+    // No account needed: either use what's remembered, or validate what was
+    // typed (name, plus the phone entered twice — the phone isn't verified by
+    // SMS, so the double entry is the guard against typos).
+    final CustomerInfo customer;
+    if (entering) {
+      if (!_formKey.currentState!.validate()) return;
+      customer = CustomerInfo(
+        name: _nameController.text.trim(),
+        phone: JordanPhone.normalize(_phoneController.text)!,
       );
-      return;
+    } else {
+      customer = saved!;
     }
-
-    // Guests fill in everything first; sign-in is only asked for now, at
-    // the very end. The login page is pushed on top of this one, so this
-    // page's state (selected address, typed phone) is still here when
-    // main.dart's sign-in listener pops back to it.
-    final isSignedIn = ref.read(currentUserProvider) != null || ref.read(isMockSignedInProvider);
-    if (!isSignedIn) {
-      if (enteringPhone && !_formKey.currentState!.validate()) return;
-      ref.read(pendingRedirectProvider.notifier).state = '/checkout';
-      ref.read(resumeCheckoutAfterSignInProvider.notifier).state = true;
-      context.push('/login');
-      return;
-    }
-
-    if (!await _savePhoneIfEntered(entering: enteringPhone)) return;
-    if (!mounted) return;
 
     final orderId = await ref.read(checkoutControllerProvider.notifier).placeOrder(
+          customerName: customer.name,
+          customerPhone: customer.phone,
           deliveryAddress: '${zone.nameAr} - ${address.details}',
           deliveryLat: address.latitude,
           deliveryLng: address.longitude,
           notes: _notesController.text,
-          deliveryFee: zone.deliveryFeeJod,
           zoneId: zone.id,
           // A local-only (guest) address has no server row to reference.
           addressId: address.isPersisted ? address.id : null,
@@ -119,6 +109,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     if (!mounted) return;
 
     if (orderId != null) {
+      await ref.read(customerInfoProvider.notifier).remember(customer);
+      // A signed-in customer's profile phone follows the number they just
+      // ordered with. Best effort: the order is already placed, and the
+      // profile column is unique, so a clash must not surface as an error.
+      if (ref.read(currentUserProvider) != null && ref.read(profilePhoneProvider).valueOrNull != customer.phone) {
+        try {
+          await savePhone(ref, customer.phone);
+        } catch (_) {}
+      }
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -157,53 +157,39 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final belowMinimum = zone != null && subtotal < zone.minOrderJod;
     final total = subtotal + deliveryFee;
     final checkoutState = ref.watch(checkoutControllerProvider);
-    final phoneAsync = ref.watch(profilePhoneProvider);
-    final savedPhone = phoneAsync.valueOrNull;
-    final enteringPhone = !phoneAsync.isLoading && (savedPhone == null || _changingPhone);
-    final isSubmitting = checkoutState.isLoading || _savingPhone;
+    final isSignedIn = ref.watch(currentUserProvider) != null;
+    final saved = _savedCustomer();
+    final detailsLoading = ref.watch(customerInfoProvider).isLoading ||
+        (isSignedIn && ref.watch(profilePhoneProvider).isLoading);
+    final entering = !detailsLoading && (saved == null || _editingCustomer);
+    final isSubmitting = checkoutState.isLoading;
 
-    // Back from sign-in that this page's confirm button asked for: finish
-    // the order with what the customer already entered, instead of making
-    // them tap "تأكيد الطلب" a second time. Runs after the frame so
-    // main.dart's listener has popped the login page first. The phone they
-    // typed as a guest is the latest one they confirmed, so it's saved to
-    // the account even if the account already had a different number.
-    ref.listen<User?>(currentUserProvider, (previous, next) {
-      if (previous != null || next == null) return;
-      if (!ref.read(resumeCheckoutAfterSignInProvider)) return;
-      ref.read(resumeCheckoutAfterSignInProvider.notifier).state = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        _showMessage('تم تسجيل الدخول — جارٍ تأكيد طلبك...');
-        // main.dart started merging the guest cart/addresses into the
-        // account; wait for that before ordering (see hydrationDone).
-        await Future.wait([
-          ref.read(cartProvider.notifier).hydrationDone,
-          ref.read(savedAddressesProvider.notifier).hydrationDone,
-        ]);
-        if (!mounted) return;
-        await _confirmOrder(enteringPhone: _phoneController.text.trim().isNotEmpty);
-      });
-    });
+    // Signed in with Google but no phone saved yet: start the name field from
+    // the Google name (once, so we never overwrite what they've typed).
+    if (entering && !_namePrefilled && _nameController.text.isEmpty) {
+      _namePrefilled = true;
+      final name = _googleName();
+      if (name != null) _nameController.text = name;
+    }
 
     ref.listen<AsyncValue<void>>(checkoutControllerProvider, (previous, next) {
       final error = next.error;
       if (error == null) return;
 
       final String message;
-      if (error is NotSignedInException) {
-        message = 'الرجاء تسجيل الدخول لإتمام الطلب.';
-      } else if (error is OutOfStockException) {
+      if (error is OutOfStockException) {
         final names = error.issues.map((issue) {
           return issue.availableQuantity == 0
               ? issue.product.nameAr
               : '${issue.product.nameAr} (متبقي ${issue.availableQuantity})';
         }).join('، ');
         message = 'تم تحديث سلتك حسب الكمية المتوفرة فعلياً: $names';
+      } else if (error is OrderRejectedException) {
+        message = _rejectionMessage(error.code);
       } else {
-        message = 'تعذر إتمام الطلب. حاول مرة أخرى.';
+        message = 'تعذر إتمام الطلب. تحقق من الاتصال وحاول مرة أخرى.';
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      _showMessage(message);
     });
 
     return Scaffold(
@@ -231,30 +217,60 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 ),
               ),
             const SizedBox(height: 20),
-            Text('رقم الهاتف', style: AppTextStyles.h3),
+            Text('بيانات التواصل', style: AppTextStyles.h3),
             const SizedBox(height: 4),
             Text(
-              'سيتصل بك السائق على هذا الرقم عند التوصيل.',
+              'سيتصل بك السائق على هذا الرقم عند التوصيل — لا نحتاج حساباً أو رمز تحقق.',
               style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 10),
-            if (phoneAsync.isLoading)
+            if (detailsLoading)
               const LinearProgressIndicator()
-            else if (!enteringPhone)
-              _SavedPhoneTile(
-                phone: JordanPhone.toLocal(savedPhone!),
+            else if (!entering)
+              _SavedCustomerTile(
+                name: saved!.name,
+                phone: JordanPhone.toLocal(saved.phone),
                 onChange: () => setState(() {
-                  _changingPhone = true;
+                  _editingCustomer = true;
+                  _nameController.text = saved.name;
                   _phoneController.clear();
                   _phoneConfirmController.clear();
                 }),
               )
-            else
+            else ...[
+              TextFormField(
+                controller: _nameController,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.name],
+                decoration: const InputDecoration(
+                  labelText: 'الاسم الكامل',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+                validator: (value) {
+                  final name = (value ?? '').trim();
+                  if (name.isEmpty) return 'الرجاء إدخال اسمك.';
+                  if (name.length < 2) return 'الاسم قصير جداً.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
               PhoneEntryFields(
                 phoneController: _phoneController,
                 confirmController: _phoneConfirmController,
               ),
-            const SizedBox(height: 20),
+            ],
+            if (!isSignedIn)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  // Optional: signing in saves addresses and carts across
+                  // devices; nobody has to, to order.
+                  onPressed: () => context.push('/login'),
+                  icon: const Icon(Icons.account_circle_outlined, size: 18),
+                  label: const Text('لديك حساب؟ سجّل الدخول بحساب Google (اختياري)'),
+                ),
+              ),
+            const SizedBox(height: 12),
             Text('ملاحظات (اختياري)', style: AppTextStyles.h3),
             const SizedBox(height: 10),
             TextFormField(
@@ -312,9 +328,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: isSubmitting || items.isEmpty || belowMinimum || phoneAsync.isLoading
+              onPressed: isSubmitting || items.isEmpty || belowMinimum || detailsLoading
                   ? null
-                  : () => _confirmOrder(enteringPhone: enteringPhone),
+                  : () => _confirmOrder(saved: saved, entering: entering),
               child: isSubmitting
                   ? const SizedBox(
                       width: 22,
@@ -409,9 +425,10 @@ class _AddressSelector extends StatelessWidget {
   }
 }
 
-class _SavedPhoneTile extends StatelessWidget {
-  const _SavedPhoneTile({required this.phone, required this.onChange});
+class _SavedCustomerTile extends StatelessWidget {
+  const _SavedCustomerTile({required this.name, required this.phone, required this.onChange});
 
+  final String name;
   final String phone;
   final VoidCallback onChange;
 
@@ -425,14 +442,44 @@ class _SavedPhoneTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.phone_outlined, color: AppColors.primary),
+          const Icon(Icons.person_outline, color: AppColors.primary),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(phone, textDirection: TextDirection.ltr, textAlign: TextAlign.start, style: AppTextStyles.bodyMedium),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: AppTextStyles.bodyMedium),
+                Text(phone, textDirection: TextDirection.ltr, style: AppTextStyles.caption),
+              ],
+            ),
           ),
           TextButton(onPressed: onChange, child: const Text('تغيير')),
         ],
       ),
     );
+  }
+}
+
+/// Arabic text for the error codes `place_order` raises (backend 008).
+String _rejectionMessage(String code) {
+  switch (code) {
+    case 'below_minimum':
+      return 'قيمة الطلب أقل من الحد الأدنى لمنطقة التوصيل المختارة.';
+    case 'out_of_stock':
+    case 'insufficient_stock':
+    case 'unknown_product':
+      return 'بعض المنتجات لم تعد متوفرة بالكمية المطلوبة. راجع سلتك وحاول مرة أخرى.';
+    case 'invalid_phone':
+      return 'رقم الهاتف غير صحيح. أدخل رقماً أردنياً يبدأ بـ 077 أو 078 أو 079.';
+    case 'invalid_name':
+      return 'الرجاء إدخال اسمك (حرفان على الأقل).';
+    case 'invalid_address':
+      return 'الرجاء إدخال تفاصيل عنوان صحيحة.';
+    case 'invalid_zone':
+      return 'منطقة التوصيل المختارة لم تعد متاحة. اختر عنواناً آخر.';
+    case 'too_many_orders':
+      return 'تم تقديم عدة طلبات خلال وقت قصير. حاول مرة أخرى بعد قليل.';
+    default:
+      return 'تعذر إتمام الطلب. حاول مرة أخرى.';
   }
 }

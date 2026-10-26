@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/config/app_config.dart';
 import '../../../home/domain/entities/product.dart';
 import '../../domain/entities/cart_item.dart';
 
@@ -19,6 +18,19 @@ class StockIssue {
   final int availableQuantity;
 }
 
+/// `place_order` refused the order. [code] is the database function's error
+/// message (see backend supabase/008): `below_minimum`, `out_of_stock`,
+/// `insufficient_stock`, `unknown_product`, `invalid_phone`, `invalid_name`,
+/// `invalid_address`, `invalid_items`, `invalid_zone`, `too_many_orders`.
+class OrderRejectedException implements Exception {
+  OrderRejectedException(this.code);
+
+  final String code;
+
+  @override
+  String toString() => 'OrderRejectedException($code)';
+}
+
 class CheckoutRepository {
   CheckoutRepository(this._client);
 
@@ -27,7 +39,9 @@ class CheckoutRepository {
   /// Re-reads current stock for every cart line right before checkout —
   /// the `Product` snapshots in the cart can be stale (added minutes or
   /// days ago, or synced down from another device via cart_items), so this
-  /// is the authoritative check, not the UI's add-to-cart guard.
+  /// is the authoritative check, not the UI's add-to-cart guard. (The
+  /// database re-checks inside `place_order` too; this exists to *reconcile*
+  /// the cart and tell the customer exactly what changed.)
   Future<List<StockIssue>> checkStock(List<CartItem> items) async {
     if (items.isEmpty) return [];
 
@@ -60,74 +74,47 @@ class CheckoutRepository {
     return issues;
   }
 
-  /// Creates the `orders` row and its `order_items`, matching
-  /// supabase/schema.sql exactly. Requires a real signed-in user — RLS
-  /// ("Users can create their own orders") checks `auth.uid() = user_id`,
-  /// so this fails for a guest session regardless of what's passed here;
-  /// the UI gates on sign-in before ever reaching this call (see
-  /// CheckoutController.placeOrder).
+  /// Places the order through the `place_order` database function, which
+  /// works for guests and signed-in users alike. Only *what* is wanted is
+  /// sent — product ids and quantities. Prices, delivery fee, minimum order
+  /// and totals are computed by the database, never trusted from the phone —
+  /// and the order and its items are written in one transaction. The
+  /// function also creates/updates the customer by phone number.
   ///
-  /// Prices are sent as full-precision doubles, not pre-rounded — same
-  /// reasoning as the rest of the app: the database column decides its own
-  /// precision, and this stays correct automatically once
-  /// supabase/004_jod_precision.sql (numeric(10,3)) is applied.
+  /// [customerPhone] must already be normalized E.164
+  /// (see `JordanPhone.normalize`). Throws [OrderRejectedException] when the
+  /// database refuses the order.
   Future<String> placeOrder({
-    required String userId,
+    required String customerName,
+    required String customerPhone,
     required List<CartItem> items,
     required String deliveryAddress,
+    required String zoneId,
+    String? addressId,
     double? deliveryLat,
     double? deliveryLng,
-    String paymentMethod = 'cash',
     String? notes,
-    double? deliveryFeeOverride,
-    String? zoneId,
-    String? addressId,
   }) async {
-    final subtotal = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
-    final deliveryFee = subtotal >= AppConfig.freeDeliveryThresholdJod
-        ? 0.0
-        : (deliveryFeeOverride ?? AppConfig.deliveryFeeJod);
-    final total = subtotal + deliveryFee;
-
-    final orderRow = await _client
-        .from('orders')
-        .insert({
-          'user_id': userId,
-          'subtotal': subtotal,
-          'delivery_fee': deliveryFee,
-          'total_price': total,
-          'delivery_address': deliveryAddress,
-          // supabase/schema.sql's delivery_lat/delivery_lng are nullable —
-          // the map pin is a refinement on top of the typed address, not a
-          // requirement, so orders placed without it still insert fine.
-          if (deliveryLat != null) 'delivery_lat': deliveryLat,
-          if (deliveryLng != null) 'delivery_lng': deliveryLng,
-          'payment_method': paymentMethod,
-          // orders.zone_id / address_id (backend supabase/007) — for
-          // admin reporting; delivery_address above stays the snapshot.
-          if (zoneId != null) 'zone_id': zoneId,
-          if (addressId != null) 'address_id': addressId,
-          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-        })
-        .select('id')
-        .single();
-
-    final orderId = orderRow['id'] as String;
-
-    final itemRows = items
-        .map(
-          (item) => {
-            'order_id': orderId,
-            'product_id': item.product.id,
-            'quantity': item.quantity,
-            'unit_price': item.product.displayPrice,
-            'line_total': item.lineTotal,
-          },
-        )
-        .toList();
-
-    await _client.from('order_items').insert(itemRows);
-
-    return orderId;
+    try {
+      final id = await _client.rpc('place_order', params: {
+        'p_customer_name': customerName,
+        'p_customer_phone': customerPhone,
+        'p_items': [
+          for (final item in items) {'product_id': item.product.id, 'quantity': item.quantity},
+        ],
+        'p_delivery_address': deliveryAddress,
+        'p_zone_id': zoneId,
+        'p_address_id': addressId,
+        'p_delivery_lat': deliveryLat,
+        'p_delivery_lng': deliveryLng,
+        'p_notes': notes,
+      });
+      return id as String;
+    } on PostgrestException catch (e) {
+      // The function raises plain codes (SQLSTATE P0001) — anything else is
+      // a transport/permission problem and stays a generic failure.
+      if (e.code == 'P0001') throw OrderRejectedException(e.message);
+      rethrow;
+    }
   }
 }

@@ -108,16 +108,7 @@ class CartNotifier extends StateNotifier<Map<String, CartItem>> {
   /// usually the guest cart the customer is about to order — it must
   /// survive. Local lines win over server lines for the same product (they're
   /// the latest choice) and are written back so the server copy matches.
-  Future<void> hydrateFromServer() => _hydration = _hydrate();
-
-  /// Completes when the latest [hydrateFromServer] has finished, so a
-  /// checkout resumed right after sign-in places the order only once the
-  /// merged cart has been written back (otherwise a late write-back could
-  /// re-add the just-ordered items after the order clears the cart).
-  Future<void> get hydrationDone => _hydration ?? Future.value();
-  Future<void>? _hydration;
-
-  Future<void> _hydrate() async {
+  Future<void> hydrateFromServer() async {
     final userId = _userId;
     if (userId == null) return;
     try {

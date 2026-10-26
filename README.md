@@ -50,7 +50,16 @@ real data:
    carousel**, or it'll just show no banners (handled gracefully, not a
    crash — `homeBannersProvider`'s error state renders nothing).
 
-Sign-in is Google only (SMS OTP was dropped for cost). It needs:
+**No account is needed to order.** Browsing, the cart and checkout all work
+as a guest: checkout asks for a name and a phone number typed twice (no SMS /
+OTP, for cost). Orders go through the `place_order` database function
+(`supabase/008_guest_checkout_customers.sql` in the backend repo), which
+recomputes prices, delivery fee and minimum order itself and creates or
+updates the customer by phone number. The last name/phone used is remembered
+on the device. Phone numbers are not verified.
+
+**Google sign-in is optional** (Account tab, or the link on checkout); it
+saves addresses and the cart across devices. To enable it:
 - Authentication → Providers → Google enabled in Supabase, with a Google
   Cloud OAuth client ID/secret (authorized redirect URI:
   `https://<project-ref>.supabase.co/auth/v1/callback`).
@@ -62,10 +71,9 @@ Sign-in is Google only (SMS OTP was dropped for cost). It needs:
   `android/app/src/main/AndroidManifest.xml` (intent-filter) — these
   folders aren't committed, so re-add it after `flutter create .`.
 
-Phone numbers aren't verified: customers type the number twice (checkout or
-Account → رقم الهاتف), it must be a Jordanian mobile (077/078/079), and it's
-saved to `profiles.phone_number`, which the admin dashboard's orders page
-shows.
+A phone typed at checkout or under Account → رقم الهاتف is saved to
+`profiles.phone_number` for signed-in users. The admin dashboard shows
+customers, their order history and spend, and sales analytics.
 
 ## Project structure
 

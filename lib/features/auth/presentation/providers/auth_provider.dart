@@ -7,8 +7,8 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(ref.watch(supabaseClientProvider));
 });
 
-/// Everyone browses as a guest by default; the only place that requires an
-/// account is confirming an order at checkout.
+/// Signing in with Google is optional everywhere: browsing, the cart and
+/// checkout all work as a guest (an order needs only a name and phone).
 ///
 /// Route to return to once sign-in actually completes, set by whatever
 /// screen sent the user to `/login` because the action they tried (e.g.
@@ -28,10 +28,3 @@ final pendingRedirectProvider = StateProvider<String?>((ref) => null);
 /// stays null, so RLS still blocks actually placing an order or syncing
 /// cart_items. Read only by UI-level navigation gates (cart_page); every
 /// repository that writes to Supabase keeps using `currentUserProvider`.
-/// Set by checkout when a guest's "تأكيد الطلب" sends them to sign in: once
-/// the sign-in lands back on that checkout, it places the order by itself so
-/// the customer doesn't tap confirm twice. Cleared when it's consumed, or
-/// when the customer backs out of the login screen instead.
-final resumeCheckoutAfterSignInProvider = StateProvider<bool>((ref) => false);
-
-final isMockSignedInProvider = StateProvider<bool>((ref) => false);

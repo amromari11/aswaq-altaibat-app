@@ -8,11 +8,6 @@ final checkoutRepositoryProvider = Provider<CheckoutRepository>((ref) {
   return CheckoutRepository(ref.watch(supabaseClientProvider));
 });
 
-/// Thrown instead of attempting an order insert that RLS would reject
-/// anyway, so the UI can show "sign in first" instead of a raw Postgrest
-/// error.
-class NotSignedInException implements Exception {}
-
 /// Thrown when a pre-checkout stock re-check finds the cart no longer
 /// matches reality (someone else bought the last of it, an admin marked it
 /// out of stock, etc). [issues] is never empty when this is thrown.
@@ -27,21 +22,18 @@ class CheckoutController extends StateNotifier<AsyncValue<void>> {
 
   final Ref _ref;
 
+  /// Guests and signed-in customers order the same way: [customerName] and
+  /// [customerPhone] (E.164) identify who it's for; no account is needed.
   Future<String?> placeOrder({
+    required String customerName,
+    required String customerPhone,
     required String deliveryAddress,
+    required String zoneId,
     double? deliveryLat,
     double? deliveryLng,
     String? notes,
-    double? deliveryFee,
-    String? zoneId,
     String? addressId,
   }) async {
-    final user = _ref.read(currentUserProvider);
-    if (user == null) {
-      state = AsyncValue.error(NotSignedInException(), StackTrace.current);
-      return null;
-    }
-
     final items = _ref.read(cartItemsListProvider);
     if (items.isEmpty) return null;
 
@@ -60,15 +52,15 @@ class CheckoutController extends StateNotifier<AsyncValue<void>> {
       }
 
       final orderId = await _ref.read(checkoutRepositoryProvider).placeOrder(
-            userId: user.id,
+            customerName: customerName,
+            customerPhone: customerPhone,
             items: items,
             deliveryAddress: deliveryAddress,
+            zoneId: zoneId,
+            addressId: addressId,
             deliveryLat: deliveryLat,
             deliveryLng: deliveryLng,
             notes: notes,
-            deliveryFeeOverride: deliveryFee,
-            zoneId: zoneId,
-            addressId: addressId,
           );
       _ref.read(cartProvider.notifier).clear();
       state = const AsyncValue.data(null);

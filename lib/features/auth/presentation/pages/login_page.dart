@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -47,30 +46,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   /// tab) — browsing never requires an account.
   void _continueShopping() {
     ref.read(pendingRedirectProvider.notifier).state = null;
-    ref.read(resumeCheckoutAfterSignInProvider.notifier).state = false;
     if (context.canPop()) {
       context.pop();
     } else {
       context.go('/home');
-    }
-  }
-
-  /// Debug-only (see the `kDebugMode` gate in build()): skips Supabase Auth
-  /// entirely — just flips [isMockSignedInProvider] and jumps straight to
-  /// Checkout, so the checkout/location-picker UI (cart summary, address
-  /// entry, phone entry, the OSM map) can be reached and tested instantly
-  /// without a configured Google provider.
-  ///
-  /// This is **not** a real sign-in: `currentUserProvider` (Supabase's
-  /// actual `auth.uid()`) stays null, so RLS still refuses to let "تأكيد
-  /// الطلب" actually place an order — that part of the flow still needs a
-  /// real session. See the caption under the button below.
-  void _mockSignInAndGoToCheckout() {
-    ref.read(isMockSignedInProvider.notifier).state = true;
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/checkout');
     }
   }
 
@@ -110,9 +89,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               Text('تسجيل الدخول', style: AppTextStyles.h2),
               const SizedBox(height: 6),
               Text(
-                ref.read(pendingRedirectProvider) == '/checkout'
-                    ? 'خطوة أخيرة: سجّل الدخول بحساب Google لتأكيد طلبك ومتابعته.'
-                    : 'سجّل الدخول بحساب Google لإتمام طلباتك ومتابعتها.',
+                'اختياري — سجّل الدخول بحساب Google لحفظ عناوينك وسلتك على كل أجهزتك. يمكنك الطلب بدون حساب.',
                 style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 24),
@@ -157,53 +134,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primaryDark),
                 ),
               ),
-              // Dev-only: kDebugMode is a compile-time constant, so this
-              // entire block (and the button it shows) is stripped out of
-              // release/profile builds — it can never reach a real user.
-              if (kDebugMode) ...[
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.construction, size: 16, color: Colors.amber.shade800),
-                          const SizedBox(width: 6),
-                          Text(
-                            'وضع التطوير فقط',
-                            style: AppTextStyles.caption.copyWith(
-                              color: Colors.amber.shade800,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton(
-                        onPressed: _mockSignInAndGoToCheckout,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.amber.shade900,
-                          side: BorderSide(color: Colors.amber.shade400),
-                        ),
-                        child: const Text('تسجيل دخول تجريبي (لاختبار الطلب)'),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'دخول وهمي محلي فقط — ينقلك لشاشة إتمام الطلب مباشرة، لكن "تأكيد الطلب" يبقى يطلب تسجيل دخول حقيقي لأن Supabase لا يرى جلسة فعلية.',
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.caption.copyWith(color: Colors.amber.shade800),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
         ),

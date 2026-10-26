@@ -92,15 +92,7 @@ class SavedAddressesNotifier extends StateNotifier<List<SavedAddress>> {
   /// this device are uploaded to their account first rather than dropped —
   /// and if checkout had one of them selected, the selection follows it to
   /// its new server id.
-  Future<void> hydrateFromServer() => _hydration = _hydrate();
-
-  /// Completes when the latest [hydrateFromServer] has finished — a checkout
-  /// resumed right after sign-in waits for it so the order references the
-  /// uploaded address's real id.
-  Future<void> get hydrationDone => _hydration ?? Future.value();
-  Future<void>? _hydration;
-
-  Future<void> _hydrate() async {
+  Future<void> hydrateFromServer() async {
     final userId = _userId;
     if (userId == null) return;
     try {
