@@ -27,6 +27,7 @@ class CustomerInfoNotifier extends AsyncNotifier<CustomerInfo?> {
   }
 
   Future<void> remember(CustomerInfo info) async {
+    await future; // let the initial load finish so it can't overwrite this
     state = AsyncData(info);
     try {
       final prefs = await SharedPreferences.getInstance();

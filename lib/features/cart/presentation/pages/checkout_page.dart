@@ -13,6 +13,8 @@ import '../../../account/presentation/providers/customer_info_provider.dart';
 import '../../../account/presentation/providers/profile_providers.dart';
 import '../../../account/presentation/widgets/phone_entry_fields.dart';
 import '../../../location/presentation/providers/location_providers.dart';
+import '../../../orders/data/local/my_orders_store.dart';
+import '../../../orders/domain/entities/order_ref.dart';
 import '../../data/repositories/checkout_repository.dart';
 import '../providers/cart_provider.dart';
 import '../providers/checkout_provider.dart';
@@ -94,6 +96,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       customer = saved!;
     }
 
+    // The key to tracking this order without an account; made up here and kept
+    // on the device (the database stores it with the order).
+    final trackingToken = newTrackingToken();
     final orderId = await ref.read(checkoutControllerProvider.notifier).placeOrder(
           customerName: customer.name,
           customerPhone: customer.phone,
@@ -104,11 +109,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           zoneId: zone.id,
           // A local-only (guest) address has no server row to reference.
           addressId: address.isPersisted ? address.id : null,
+          trackingToken: trackingToken,
         );
 
     if (!mounted) return;
 
     if (orderId != null) {
+      // Remember the order on this device (a guest has no account to list it
+      // from), then show live tracking instead of a one-off confirmation.
+      final orderRef = OrderRef(id: orderId, token: trackingToken);
+      await ref.read(myOrderRefsProvider.notifier).add(orderRef);
       await ref.read(customerInfoProvider.notifier).remember(customer);
       // A signed-in customer's profile phone follows the number they just
       // ordered with. Best effort: the order is already placed, and the
@@ -119,30 +129,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         } catch (_) {}
       }
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          icon: const Icon(Icons.check_circle, color: AppColors.success, size: 48),
-          title: const Text('تم تأكيد طلبك', textAlign: TextAlign.center),
-          content: Text(
-            'شكراً لطلبك من أسواق الطيبات! سيتم التواصل معك لتأكيد التوصيل.',
-            textAlign: TextAlign.center,
-            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
-          ),
-          actions: [
-            Center(
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('حسناً'),
-              ),
-            ),
-          ],
-        ),
-      );
-      if (!mounted) return;
-      context.go('/home');
+      context.go('/order/${orderRef.id}?t=${orderRef.token}');
     }
   }
 

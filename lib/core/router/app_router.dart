@@ -13,7 +13,9 @@ import '../../features/location/presentation/pages/location_picker_page.dart';
 import '../../features/location/presentation/pages/osm_location_picker_page.dart';
 import '../../features/location/presentation/pages/saved_addresses_page.dart';
 import '../../features/offers/presentation/pages/offers_page.dart';
+import '../../features/orders/domain/entities/order_ref.dart';
 import '../../features/orders/presentation/pages/my_orders_page.dart';
+import '../../features/orders/presentation/pages/order_tracking_page.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../widgets/app_shell.dart';
 
@@ -25,6 +27,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(path: '/cart', builder: (context, state) => const CartPage()),
       GoRoute(path: '/checkout', builder: (context, state) => const CheckoutPage()),
+      // The token rides in the query string (not `extra`) so the link still
+      // works after a browser reload.
+      GoRoute(
+        path: '/order/:id',
+        builder: (context, state) => OrderTrackingPage(
+          orderRef: OrderRef(id: state.pathParameters['id']!, token: state.uri.queryParameters['t'] ?? ''),
+        ),
+      ),
       GoRoute(
         path: '/addresses',
         builder: (context, state) => SavedAddressesPage(pickMode: state.extra == true),

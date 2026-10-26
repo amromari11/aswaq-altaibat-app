@@ -71,6 +71,30 @@ saves addresses and the cart across devices. To enable it:
   `android/app/src/main/AndroidManifest.xml` (intent-filter) — these
   folders aren't committed, so re-add it after `flutter create .`.
 
+**Order tracking.** After checkout the customer lands on a live tracking
+screen (`/order/:id?t=<token>`): a four-step timeline (تم الاستلام → قيد
+التحضير → خرج للتوصيل → تم التسليم), expected arrival, delivery details and an
+items summary. Guests have no account, so each order carries a random secret
+`tracking_token` made up by the phone; `{id, token}` is the key
+(`supabase/009_order_tracking.sql` in the backend repo). Status changes made
+in the admin dashboard are pushed over a Supabase Realtime broadcast channel
+(`order:<token>`), with a 20-second re-check as a fallback. The orders list
+The top of the screen is an OpenStreetMap view (`flutter_map`) with the store
+pin, the customer's delivery pin and — while the order is out for delivery —
+the driver, moving live (`supabase/010_driver_tracking.sql`: the admin side
+calls `set_driver_location()`, a trigger broadcasts the position on the same
+`order:<token>` channel as `driver` events, and the position is deleted when
+the order leaves "out for delivery"). The route is drawn as a straight line,
+solid where the driver has been and dotted ahead; there's no routing engine.
+The store's location is `AppConfig.storeLatitude/Longitude` (from the shop's
+Plus Code `33FW+84 Zarqa`); keep `utils/store.py` in the backend repo in step.
+The public OpenStreetMap tile server is fine for
+development; for production traffic use a tile provider (see OSM's tile usage
+policy).
+
+The orders list (طلباتي) shows this device's orders — plus a signed-in customer's account
+orders — active ones first.
+
 A phone typed at checkout or under Account → رقم الهاتف is saved to
 `profiles.phone_number` for signed-in users. The admin dashboard shows
 customers, their order history and spend, and sales analytics.

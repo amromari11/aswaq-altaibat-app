@@ -25,4 +25,14 @@ class AppConfig {
   static const double freeDeliveryThresholdJod = 20.0;
 
   static const double deliveryFeeJod = 1.5;
+
+  /// Where the store is — the "store" marker and the start of the delivery
+  /// route on the order-tracking map.
+  ///
+  /// From the shop's Plus Code `33FW+84 Zarqa` (= `8G4R33FW+84`), decoded to
+  /// the centre of its ~14 m cell. Keep `STORE_LAT` / `STORE_LNG` in the admin
+  /// dashboard's `utils/store.py` in step with these.
+  static const String storeName = 'أسواق الطيبات';
+  static const double storeLatitude = 32.073313;
+  static const double storeLongitude = 36.095312;
 }

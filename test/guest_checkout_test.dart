@@ -10,6 +10,7 @@ import 'package:aswaq_altaibat/features/cart/presentation/providers/cart_provide
 import 'package:aswaq_altaibat/features/cart/presentation/providers/checkout_provider.dart';
 import 'package:aswaq_altaibat/features/home/domain/entities/product.dart';
 import 'package:aswaq_altaibat/features/location/domain/entities/delivery_zone.dart';
+import 'package:aswaq_altaibat/features/orders/data/local/my_orders_store.dart';
 import 'package:aswaq_altaibat/features/location/domain/entities/saved_address.dart';
 import 'package:aswaq_altaibat/features/location/presentation/providers/location_providers.dart';
 import 'package:flutter/material.dart';
@@ -58,6 +59,7 @@ class _FakeCheckoutRepository implements CheckoutRepository {
     double? deliveryLat,
     double? deliveryLng,
     String? notes,
+    String? trackingToken,
   }) async {
     if (rejectWith != null) throw OrderRejectedException(rejectWith!);
     orders.add({
@@ -67,6 +69,7 @@ class _FakeCheckoutRepository implements CheckoutRepository {
       'addressId': addressId,
       'address': deliveryAddress,
       'quantity': items.single.quantity,
+      'token': trackingToken,
     });
     return 'order-1';
   }
@@ -128,6 +131,10 @@ void main() {
         GoRoute(path: '/checkout', builder: (_, __) => const CheckoutPage()),
         GoRoute(path: '/login', builder: (_, __) => const Scaffold(body: Text('LOGIN PAGE'))),
         GoRoute(path: '/home', builder: (_, __) => const Scaffold(body: Text('HOME PAGE'))),
+        GoRoute(
+          path: '/order/:id',
+          builder: (_, state) => Scaffold(body: Text('TRACKING ${state.pathParameters['id']} ${state.uri.queryParameters['t']}')),
+        ),
         GoRoute(path: '/addresses', builder: (_, __) => const Scaffold(body: Text('ADDRESSES'))),
         GoRoute(path: '/address-form', builder: (_, __) => const Scaffold(body: Text('ADDRESS FORM'))),
       ],
@@ -204,7 +211,23 @@ void main() {
       expect(orders.orders.single['zoneId'], _zone.id);
       expect(orders.orders.single['addressId'], isNull, reason: 'a guest address has no server row');
       expect(orders.orders.single['address'], contains('شارع الجيش'));
-      expect(find.text('تم تأكيد طلبك'), findsOneWidget);
+      // Straight to live tracking for THIS order — no static confirmation.
+      expect(find.text('تم تأكيد طلبك'), findsNothing);
+      final token = orders.orders.single['token'] as String;
+      expect(token, matches(RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')));
+      expect(find.text('TRACKING order-1 $token'), findsOneWidget);
+    });
+
+    testWidgets('remembers the order on this device so it can be found again', (tester) async {
+      final container = await pump(tester, address: _address);
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+
+      final refs = container.read(myOrderRefsProvider).valueOrNull!;
+      expect(refs.single.id, 'order-1');
+      expect(refs.single.token, orders.orders.single['token']);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('my_orders'), contains('order-1'));
     });
 
     testWidgets('remembers the details on the device for next time', (tester) async {
@@ -306,7 +329,7 @@ void main() {
         await tapConfirm(tester);
 
         expect(find.textContaining(entry.value), findsOneWidget);
-        expect(find.text('تم تأكيد طلبك'), findsNothing);
+        expect(find.textContaining('TRACKING'), findsNothing);
         expect(orders.orders, isEmpty);
       });
     }

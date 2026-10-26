@@ -94,6 +94,7 @@ class CheckoutRepository {
     double? deliveryLat,
     double? deliveryLng,
     String? notes,
+    String? trackingToken,
   }) async {
     try {
       final id = await _client.rpc('place_order', params: {
@@ -108,6 +109,9 @@ class CheckoutRepository {
         'p_delivery_lat': deliveryLat,
         'p_delivery_lng': deliveryLng,
         'p_notes': notes,
+        // Made up by the phone and kept there: it is the key to tracking this
+        // order without an account (see backend supabase/009).
+        'p_tracking_token': trackingToken,
       });
       return id as String;
     } on PostgrestException catch (e) {
