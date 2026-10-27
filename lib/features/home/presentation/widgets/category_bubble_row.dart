@@ -5,7 +5,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../categories/presentation/widgets/category_image.dart';
 import '../../domain/entities/category.dart';
 
-/// Circular bubble category selector (ألبان، منظفات، خضار وفواكه، ...).
+/// Rounded-tile category selector (ألبان، منظفات، خضار وفواكه، ...).
 class CategoryBubbleRow extends StatelessWidget {
   const CategoryBubbleRow({
     super.key,
@@ -21,7 +21,7 @@ class CategoryBubbleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      // 60 bubble + 6 gap + two lines of Cairo caption (~34) — 92 clipped
+      // 64 tile + 6 gap + two lines of Cairo caption (~34) — 92 clipped
       // two-line names like "اجبان والبان ومشتقاتها" by 8px.
       height: 104,
       child: ListView.separated(
@@ -39,19 +39,22 @@ class CategoryBubbleRow extends StatelessWidget {
               child: Column(
                 children: [
                   Container(
-                    width: 60,
-                    height: 60,
+                    width: 64,
+                    height: 64,
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? AppColors.primary : AppColors.primaryLight,
-                      border:
-                          isSelected ? Border.all(color: AppColors.primaryDark, width: 2) : null,
+                      borderRadius: BorderRadius.circular(18),
+                      color: AppColors.tile,
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : Colors.transparent,
+                        width: 2,
+                      ),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: CategoryImage(
-                      imageUrl: category.imageUrl,
-                      iconColor: isSelected ? Colors.white : AppColors.primary,
-                      cacheWidth: 180,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(13),
+                      child: SizedBox.expand(
+                        child: CategoryImage(imageUrl: category.imageUrl, cacheWidth: 180),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -64,7 +67,7 @@ class CategoryBubbleRow extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.caption.copyWith(
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                        fontWeight: FontWeight.w800,
                         color: isSelected ? AppColors.primaryDark : AppColors.textSecondary,
                       ),
                     ),

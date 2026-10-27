@@ -24,6 +24,7 @@ class AppColors {
   static const Color textMuted = Color(0xFF9CA3AF);
 
   static const Color border = Color(0xFFE5E7EB);
+  static const Color tile = Color(0xFFF4F6FA); // Soft tile behind category pictures
   static const Color success = Color(0xFF16A34A); // Semantic (free-delivery reached) — not a brand color
   static const Color error = accent;
 

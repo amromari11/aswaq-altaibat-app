@@ -23,14 +23,19 @@ class CategoryCard extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
+              // A soft tile the picture sits on: isolated product shots (white
+              // background) blend into it, photos get a tidy rounded frame.
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
+                  color: AppColors.tile,
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(13),
-                  child: SizedBox.expand(child: CategoryImage(imageUrl: category.imageUrl)),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(13),
+                    child: SizedBox.expand(child: CategoryImage(imageUrl: category.imageUrl)),
+                  ),
                 ),
               ),
             ),
@@ -41,7 +46,7 @@ class CategoryCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.caption
-                  .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                  .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w800),
             ),
           ],
         ),
