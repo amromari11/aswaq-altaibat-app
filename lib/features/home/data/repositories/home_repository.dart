@@ -13,11 +13,10 @@ class HomeRepository {
         .from('categories')
         .select()
         .eq('is_active', true)
-        .order('display_order', ascending: true);
+        .order('display_order', ascending: true)
+        .order('name_ar', ascending: true);
 
-    return (rows as List)
-        .map((row) => Category.fromJson(row as Map<String, dynamic>))
-        .toList();
+    return (rows as List).map((row) => Category.fromJson(row as Map<String, dynamic>)).toList();
   }
 
   Future<List<Product>> fetchWeeklyOffers({int limit = 10}) async {
@@ -110,8 +109,6 @@ class HomeRepository {
   }
 
   List<Product> _parseProducts(Object? rows) {
-    return (rows as List)
-        .map((row) => Product.fromJson(row as Map<String, dynamic>))
-        .toList();
+    return (rows as List).map((row) => Product.fromJson(row as Map<String, dynamic>)).toList();
   }
 }

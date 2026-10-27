@@ -1,8 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../categories/presentation/widgets/category_image.dart';
 import '../../domain/entities/category.dart';
 
 /// Circular bubble category selector (ألبان، منظفات، خضار وفواكه، ...).
@@ -44,18 +44,15 @@ class CategoryBubbleRow extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isSelected ? AppColors.primary : AppColors.primaryLight,
-                      border: isSelected
-                          ? Border.all(color: AppColors.primaryDark, width: 2)
-                          : null,
+                      border:
+                          isSelected ? Border.all(color: AppColors.primaryDark, width: 2) : null,
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: category.imageUrl != null
-                        ? CachedNetworkImage(
-                            imageUrl: category.imageUrl!,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, _, __) => _fallbackIcon(isSelected),
-                          )
-                        : _fallbackIcon(isSelected),
+                    child: CategoryImage(
+                      imageUrl: category.imageUrl,
+                      iconColor: isSelected ? Colors.white : AppColors.primary,
+                      cacheWidth: 180,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   // Flexible so a larger system text scale shrinks the label
@@ -78,13 +75,6 @@ class CategoryBubbleRow extends StatelessWidget {
           );
         },
       ),
-    );
-  }
-
-  Widget _fallbackIcon(bool isSelected) {
-    return Icon(
-      Icons.local_grocery_store_outlined,
-      color: isSelected ? Colors.white : AppColors.primary,
     );
   }
 }

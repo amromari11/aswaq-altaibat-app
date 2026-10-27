@@ -5,6 +5,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/curved_header_clipper.dart';
+import '../../../categories/presentation/providers/selected_category_provider.dart';
 import '../../domain/entities/product.dart';
 import '../providers/home_providers.dart';
 import '../widgets/banner_carousel.dart';
@@ -25,8 +26,6 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  String? _selectedCategoryId;
-
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
@@ -74,10 +73,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             const SizedBox(height: 14),
             HomeSearchBar(
-              onChanged: (value) =>
-                  ref.read(searchQueryProvider.notifier).state = value,
-              onSubmitted: (value) =>
-                  ref.read(searchQueryProvider.notifier).state = value,
+              onChanged: (value) => ref.read(searchQueryProvider.notifier).state = value,
+              onSubmitted: (value) => ref.read(searchQueryProvider.notifier).state = value,
             ),
           ],
         ),
@@ -96,17 +93,16 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildCategories() {
     final categories = ref.watch(categoriesProvider);
+    final selectedId = ref.watch(selectedCategoryProvider);
     return categories.when(
       data: (data) {
         if (data.isEmpty) return const SizedBox.shrink();
         return CategoryBubbleRow(
           categories: data,
-          selectedCategoryId: _selectedCategoryId,
+          selectedCategoryId: selectedId,
           onSelected: (category) {
-            setState(() {
-              _selectedCategoryId =
-                  _selectedCategoryId == category.id ? null : category.id;
-            });
+            ref.read(selectedCategoryProvider.notifier).state =
+                selectedId == category.id ? null : category.id;
           },
         );
       },
@@ -148,10 +144,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
     }
 
-    if (_selectedCategoryId != null) {
+    final selectedCategoryId = ref.watch(selectedCategoryProvider);
+    if (selectedCategoryId != null) {
       return _productSection(
         title: 'المنتجات',
-        asyncProducts: ref.watch(categoryProductsProvider(_selectedCategoryId!)),
+        asyncProducts: ref.watch(categoryProductsProvider(selectedCategoryId)),
         emptyMessage: 'لا توجد منتجات في هذا القسم.',
       );
     }
