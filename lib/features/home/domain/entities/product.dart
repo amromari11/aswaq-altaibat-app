@@ -37,6 +37,9 @@ class Product {
   final String nameAr;
   final String? description;
   final String? imageUrl;
+
+  /// False for most products for now; the app then shows the category's picture instead.
+  bool get hasOwnImage => imageUrl != null && imageUrl!.isNotEmpty;
   final String? unit;
   final double price;
   final double? discountPrice;

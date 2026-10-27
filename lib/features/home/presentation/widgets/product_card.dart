@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,8 +6,9 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../domain/entities/product.dart';
+import 'product_image.dart';
 
-/// A single product tile for the home/category grid: image, discount
+/// A single product tile for the home/category grid: picture (or its category's), discount
 /// badge, bilingual-ready name, JOD price (with strikethrough original
 /// when discounted), and a quantity stepper wired straight to the cart.
 class ProductCard extends ConsumerWidget {
@@ -41,45 +41,33 @@ class ProductCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: SizedBox.expand(
-                      child: product.imageUrl != null
-                          ? CachedNetworkImage(
-                              imageUrl: product.imageUrl!,
-                              fit: BoxFit.cover,
-                              placeholder: (context, _) =>
-                                  Container(color: AppColors.background),
-                              errorWidget: (context, _, __) => _placeholderImage(),
-                            )
-                          : _placeholderImage(),
-                    ),
-                  ),
-                  if (product.hasDiscount)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: _DiscountBadge(percent: product.discountPercent),
-                    ),
-                  if (product.isOutOfStock)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: ProductImage(product: product)),
+                    if (product.hasDiscount)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: _DiscountBadge(percent: product.discountPercent),
+                      ),
+                    if (product.isOutOfStock)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'غير متوفر',
+                            style: AppTextStyles.bodyMedium.copyWith(color: Colors.white),
                           ),
                         ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'غير متوفر',
-                          style: AppTextStyles.bodyMedium.copyWith(color: Colors.white),
-                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
             Padding(
@@ -131,14 +119,6 @@ class ProductCard extends ConsumerWidget {
       ),
     );
   }
-
-  Widget _placeholderImage() {
-    return Container(
-      color: AppColors.background,
-      alignment: Alignment.center,
-      child: const Icon(Icons.shopping_basket_outlined, color: AppColors.textMuted, size: 32),
-    );
-  }
 }
 
 class _DiscountBadge extends StatelessWidget {
@@ -185,7 +165,9 @@ class _QuantityStepper extends ConsumerWidget {
       final added = ref.read(cartProvider.notifier).add(product);
       if (!added) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('الكمية المتوفرة من "${product.nameAr}" هي ${product.stockQuantity} فقط.')),
+          SnackBar(
+              content:
+                  Text('الكمية المتوفرة من "${product.nameAr}" هي ${product.stockQuantity} فقط.')),
         );
       }
     }
