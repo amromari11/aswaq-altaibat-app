@@ -8,10 +8,14 @@ class HomeSearchBar extends StatelessWidget {
     super.key,
     required this.onChanged,
     required this.onSubmitted,
+    this.controller,
   });
 
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
+
+  /// Lets the page show a search that something else started (e.g. a banner).
+  final TextEditingController? controller;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +32,7 @@ class HomeSearchBar extends StatelessWidget {
         ],
       ),
       child: TextField(
+        controller: controller,
         textInputAction: TextInputAction.search,
         onChanged: onChanged,
         onSubmitted: onSubmitted,

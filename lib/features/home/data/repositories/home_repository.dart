@@ -83,6 +83,14 @@ class HomeRepository {
     return _parseProducts(rows);
   }
 
+  /// One active product by id, or null if it is gone or hidden (a banner may point at one).
+  Future<Product?> fetchProduct(String id) async {
+    final rows =
+        await _client.from('products').select().eq('id', id).eq('is_active', true).limit(1);
+    final products = _parseProducts(rows);
+    return products.isEmpty ? null : products.first;
+  }
+
   /// "Order again" — the most recent distinct products this signed-in user
   /// has actually bought, newest first. Empty for guests (no `user_id` to
   /// query), which the UI treats as "hide this row" rather than an error.

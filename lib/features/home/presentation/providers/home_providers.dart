@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/supabase/supabase_providers.dart';
 import '../../../sponsors/data/repositories/sponsors_repository.dart';
-import '../../../sponsors/domain/entities/sponsor_banner.dart';
 import '../../data/repositories/home_repository.dart';
 import '../../domain/entities/category.dart';
 import '../../domain/entities/product.dart';
@@ -31,10 +30,6 @@ final appExclusiveProductsProvider = FutureProvider<List<Product>>((ref) {
   return ref.watch(homeRepositoryProvider).fetchAppExclusive();
 });
 
-final homeBannersProvider = FutureProvider<List<SponsorBanner>>((ref) {
-  return ref.watch(sponsorsRepositoryProvider).fetchBanners(placement: 'home');
-});
-
 /// Empty (not an error) for guests — the UI hides the "Order again" row
 /// entirely when this resolves to an empty list.
 final orderAgainProvider = FutureProvider<List<Product>>((ref) {
@@ -43,8 +38,7 @@ final orderAgainProvider = FutureProvider<List<Product>>((ref) {
   return ref.watch(homeRepositoryProvider).fetchOrderAgain(user.id);
 });
 
-final categoryProductsProvider =
-    FutureProvider.family<List<Product>, String>((ref, categoryId) {
+final categoryProductsProvider = FutureProvider.family<List<Product>, String>((ref, categoryId) {
   return ref.watch(homeRepositoryProvider).fetchByCategory(categoryId);
 });
 

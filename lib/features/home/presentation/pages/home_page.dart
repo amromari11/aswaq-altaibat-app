@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shimmer/shimmer.dart';
 
+import '../../../banners/presentation/banner_actions.dart';
+import '../../../banners/presentation/providers/banner_providers.dart';
+import '../../../banners/presentation/widgets/promo_banner_carousel.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/curved_header_clipper.dart';
 import '../../../categories/presentation/providers/selected_category_provider.dart';
 import '../../domain/entities/product.dart';
 import '../providers/home_providers.dart';
-import '../widgets/banner_carousel.dart';
 import '../widgets/category_bubble_row.dart';
 import '../widgets/home_brand_bar.dart';
 import '../widgets/home_search_bar.dart';
@@ -26,8 +29,19 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<String>(searchQueryProvider, (_, query) {
+      if (_searchController.text != query) _searchController.text = query;
+    });
     return CustomScrollView(
       slivers: [
         const SliverToBoxAdapter(child: HomeBrandBar()),
@@ -73,6 +87,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             const SizedBox(height: 14),
             HomeSearchBar(
+              controller: _searchController,
               onChanged: (value) => ref.read(searchQueryProvider.notifier).state = value,
               onSubmitted: (value) => ref.read(searchQueryProvider.notifier).state = value,
             ),
@@ -83,9 +98,18 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildBanners() {
-    final banners = ref.watch(homeBannersProvider);
+    final banners = ref.watch(promoBannersProvider);
     return banners.when(
-      data: (data) => BannerCarousel(banners: data),
+      data: (data) => PromoBannerCarousel(
+        banners: data,
+        onBannerTap: (banner) async {
+          final messenger = ScaffoldMessenger.of(context);
+          final opened = await openBanner(ref, banner);
+          if (!opened && mounted) {
+            messenger.showSnackBar(const SnackBar(content: Text('تعذر فتح هذا العرض حالياً')));
+          }
+        },
+      ),
       loading: () => const _ShimmerBlock(height: 150, borderRadius: 16),
       error: (_, __) => const SizedBox.shrink(),
     );
