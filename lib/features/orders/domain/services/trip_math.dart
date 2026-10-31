@@ -4,7 +4,8 @@ import 'package:latlong2/latlong.dart';
 
 import '../entities/order_tracking.dart';
 
-const _distance = Distance();
+// roundResult: false - by default the library rounds to whole units, i.e. whole kilometres here.
+const _distance = Distance(roundResult: false);
 
 /// How far along the trip from the store to the customer the driver is.
 class TripProgress {

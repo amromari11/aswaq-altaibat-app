@@ -1304,6 +1304,10 @@ void main() {
       expect(tripProgress(store: store, home: home, driver: null)!.fraction, 0, reason: 'still at the store');
       expect(tripProgress(store: store, home: home, driver: home)!.fraction, 1);
       expect(tripProgress(store: store, home: home, driver: const LatLng(32.1, 36.0))!.fraction, closeTo(0.5, 0.01));
+      // Short trips keep their decimals (the library rounds to whole kilometres unless told not to).
+      const near = LatLng(32.0126, 36.0);
+      expect(tripProgress(store: store, home: const LatLng(32.0126, 36.0), driver: null)!.remainingKm, closeTo(1.40, 0.02));
+      expect(tripProgress(store: near, home: const LatLng(32.0126 + 0.0045, 36.0), driver: near)!.remainingKm, closeTo(0.50, 0.02));
       expect(tripProgress(store: store, home: home, driver: const LatLng(31.9, 36.0))!.fraction, 0, reason: 'never negative');
       expect(distanceLabel(0.45), '450 م');
       expect(distanceLabel(1.24), '1.2 كم');
@@ -1329,6 +1333,49 @@ void main() {
       expect(find.text('جاهز للاستلام'), findsOneWidget);
       expect(find.text('تم الاستلام من الفرع'), findsOneWidget);
       expect(find.text('خرج للتوصيل'), findsNothing);
+    });
+  });
+
+  group('order map framing', () {
+    const store = LatLng(32.0, 36.0);
+    const home = LatLng(32.05, 36.04);
+
+    Future<void> pumpMap(WidgetTester tester, Size size, {Key? key}) async {
+      await tester.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: _noAnimation,
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: size.width,
+                height: size.height,
+                child: OrderMap(key: key, store: store, home: home, tileProvider: _BlankTiles()),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    Offset centre(WidgetTester tester, String key) => tester.getCenter(find.byKey(ValueKey('map-marker-$key')));
+
+    testWidgets('when its box changes size the pins are framed again, as if built at the new size', (tester) async {
+      await pumpMap(tester, const Size(400, 300), key: const ValueKey('map-a'));
+      await pumpMap(tester, const Size(400, 600), key: const ValueKey('map-a')); // same map, taller box
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final resizedHome = centre(tester, 'home');
+      final resizedStore = centre(tester, 'store');
+
+      await pumpMap(tester, const Size(400, 600), key: const ValueKey('map-b')); // a fresh map at that size
+      expect(resizedHome.dx, closeTo(centre(tester, 'home').dx, 2));
+      expect(resizedHome.dy, closeTo(centre(tester, 'home').dy, 2));
+      expect(resizedStore.dy, closeTo(centre(tester, 'store').dy, 2));
+      expect(resizedHome.dy, inInclusiveRange(0, 600));
+      expect(resizedStore.dy, inInclusiveRange(0, 600));
     });
   });
 }

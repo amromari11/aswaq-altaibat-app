@@ -63,6 +63,7 @@ class _OrderMapState extends State<OrderMap> {
   final _controller = MapController();
   bool _ready = false;
   bool _userMoved = false;
+  Size? _lastSize;
 
   List<LatLng> get _points => [widget.store, if (widget.home != null) widget.home!, if (widget.driver != null) widget.driver!];
 
@@ -103,6 +104,23 @@ class _OrderMapState extends State<OrderMap> {
     final driver = widget.driver;
     final animate = !MediaQuery.disableAnimationsOf(context);
 
+    // The map is framed once, when it appears. If its box then changes size (the phone is
+    // rotated, a window is resized) the pins would end up under the edges, so frame it again
+    // - unless the customer has already moved the map themselves.
+    return LayoutBuilder(builder: (context, constraints) {
+      final size = constraints.biggest;
+      final previous = _lastSize;
+      _lastSize = size;
+      if (previous != null && previous != size && _ready && !_userMoved && _points.length > 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_userMoved) _controller.fitCamera(_fit());
+        });
+      }
+      return _buildMap(context, home, driver, animate);
+    });
+  }
+
+  Widget _buildMap(BuildContext context, LatLng? home, LatLng? driver, bool animate) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.borderRadius),
       child: Stack(
