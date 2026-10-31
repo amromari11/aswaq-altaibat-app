@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/app_config.dart';
 import 'core/notifications/local_notifications_service.dart';
+import 'core/notifications/push_registration_service.dart';
 import 'core/router/app_router.dart';
 import 'core/supabase/supabase_providers.dart';
 import 'core/theme/app_theme.dart';
@@ -46,6 +47,9 @@ Future<void> main() async {
     unawaited(container.read(savedAddressesProvider.notifier).hydrateFromServer());
   }
 
+  // Push registration runs in the background: it must never delay or break startup.
+  unawaited(container.read(pushRegistrationServiceProvider).start());
+
   runApp(UncontrolledProviderScope(container: container, child: const AswaqAltaibatApp()));
 }
 
@@ -72,6 +76,10 @@ class AswaqAltaibatApp extends ConsumerWidget {
     // Sign-out clears local cart/address state only, without touching the
     // saved server-side copies.
     ref.listen<User?>(currentUserProvider, (previous, next) {
+      // The same device now belongs to someone else (or to a guest again).
+      if (previous?.id != next?.id) {
+        unawaited(ref.read(pushRegistrationServiceProvider).refreshRegistration());
+      }
       if (previous == null && next != null) {
         ref.read(cartProvider.notifier).hydrateFromServer();
         ref.read(savedAddressesProvider.notifier).hydrateFromServer();

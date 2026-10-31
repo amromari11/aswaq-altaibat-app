@@ -29,6 +29,11 @@ class LocalNotificationsService {
   static const String _channelName = 'تذكير السلة';
   static const String _channelDescription = 'تذكير عند ترك منتجات في السلة دون إتمام الطلب';
 
+  // Must match the channel id the admin dashboard puts on its push messages.
+  static const String _promoChannelId = 'promotions';
+  static const String _promoChannelName = 'العروض والإشعارات';
+  static const int _promoNotificationId = 2001;
+
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
@@ -78,6 +83,25 @@ class LocalNotificationsService {
       // permission for what's just a gentle, approximately-timed nudge.
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  /// Shows a push that arrived while the app was open (Android doesn't draw those itself).
+  Future<void> showPromotion(String? title, String? body) async {
+    if (!_initialized || (title == null && body == null)) return;
+    await _plugin.show(
+      _promoNotificationId,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _promoChannelId,
+          _promoChannelName,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
     );
   }
 

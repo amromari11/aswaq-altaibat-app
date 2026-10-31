@@ -27,3 +27,6 @@ web/
 # Store POS catalog export (barcodes, prices, tax) — internal data, read
 # locally by aswaq-altaibat-backend/scripts/import_products.py; never commit.
 assets/names of product/
+
+# real Firebase client settings (copy firebase_dart_define.example.json)
+firebase_dart_define.json

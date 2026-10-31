@@ -55,6 +55,8 @@ dependencies:
   url_launcher: ^6.3.3
   speech_to_text: ^7.5.0
   mobile_scanner: ^7.4.2
+  firebase_core: ^5.1.0
+  firebase_messaging: ^17.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
