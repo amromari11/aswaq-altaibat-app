@@ -73,7 +73,13 @@ class _CategoryFallback extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             const ColoredBox(color: AppColors.tile),
-            CategoryImage(imageUrl: categoryUrl, iconColor: AppColors.textMuted, cacheWidth: 300),
+            // The cutout sits above the "illustrative" pill, never under it.
+            CategoryImage(
+              imageUrl: categoryUrl,
+              iconColor: AppColors.textMuted,
+              cacheWidth: 300,
+              padding: EdgeInsets.fromLTRB(12, 12, 12, hasPhoto ? 26 : 12),
+            ),
             if (hasPhoto)
               Align(
                 alignment: Alignment.bottomCenter,

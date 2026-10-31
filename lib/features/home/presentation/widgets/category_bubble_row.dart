@@ -8,7 +8,7 @@ import '../../../categories/presentation/widgets/category_image.dart';
 import '../../domain/entities/category.dart';
 
 /// Compact category selector: five rounded tiles fit the width, the rest scroll
-/// sideways. Each tile is a square picture with a bold two-line name underneath.
+/// sideways. Each tile is a white card: an isolated product cutout with a bold two-line name under it.
 class CategoryBubbleRow extends StatelessWidget {
   const CategoryBubbleRow({
     super.key,
@@ -26,6 +26,7 @@ class CategoryBubbleRow extends StatelessWidget {
   static const _gap = 8.0;
   static const _maxTile = 92.0; // keeps tiles tidy on tablets / desktop (more than 5 show there)
   static const _labelSize = 11.0;
+  static const _cardPadding = 5.0;
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +38,11 @@ class CategoryBubbleRow extends StatelessWidget {
         );
         // Two label lines at the user's text size, so a larger system font grows the row
         // instead of overflowing it.
-        final labelHeight = MediaQuery.textScalerOf(context).scale(_labelSize) * 1.7 * 2;
+        final labelHeight = MediaQuery.textScalerOf(context).scale(_labelSize) * 1.3 * 2;
+        final picture = tile - _cardPadding * 2;
 
         return SizedBox(
-          height: tile + 6 + labelHeight,
+          height: _cardPadding * 2 + picture + 4 + labelHeight + 2,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: categories.length,
@@ -55,31 +57,30 @@ class CategoryBubbleRow extends StatelessWidget {
                 label: category.nameAr,
                 child: GestureDetector(
                   onTap: () => onSelected(category),
-                  child: SizedBox(
+                  child: Container(
                     width: tile,
+                    padding: const EdgeInsets.fromLTRB(_cardPadding, _cardPadding, _cardPadding, 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : AppColors.border,
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
                     child: Column(
                       children: [
-                        Container(
-                          width: tile,
-                          height: tile,
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            color: AppColors.tile,
-                            border: Border.all(
-                              color: isSelected ? AppColors.primary : Colors.transparent,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: SizedBox.expand(
-                              child: CategoryImage(imageUrl: category.imageUrl, cacheWidth: 160),
-                            ),
+                        SizedBox(
+                          width: picture,
+                          height: picture,
+                          child: CategoryImage(
+                            imageUrl: category.imageUrl,
+                            cacheWidth: 160,
+                            padding: EdgeInsets.zero,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Flexible(
+                        const SizedBox(height: 4),
+                        Expanded(
                           child: Text(
                             category.nameAr,
                             textAlign: TextAlign.center,

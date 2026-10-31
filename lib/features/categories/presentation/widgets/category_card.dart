@@ -5,7 +5,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../home/domain/entities/category.dart';
 import 'category_image.dart';
 
-/// A square photo card with the category name underneath.
+/// A white rounded card: an isolated product cutout with the category name under it.
 class CategoryCard extends StatelessWidget {
   const CategoryCard({super.key, required this.category, required this.onTap});
 
@@ -20,35 +20,28 @@ class CategoryCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        child: Column(
-          children: [
-            Expanded(
-              // A soft tile the picture sits on: isolated product shots (white
-              // background) blend into it, photos get a tidy rounded frame.
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: AppColors.tile,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(13),
-                    child: SizedBox.expand(child: CategoryImage(imageUrl: category.imageUrl)),
-                  ),
-                ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              // Isolated product cutout, shown whole on the white card.
+              Expanded(child: CategoryImage(imageUrl: category.imageUrl, padding: EdgeInsets.zero)),
+              const SizedBox(height: 6),
+              Text(
+                category.nameAr,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w800),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              category.nameAr,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.caption
-                  .copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w800),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

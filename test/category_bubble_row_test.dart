@@ -27,6 +27,7 @@ void main() {
   });
 
   _registerFiveAcrossTests();
+  _registerCutoutStyleTests();
 }
 
 // ---- five tiles per row ----
@@ -105,5 +106,59 @@ void _registerFiveAcrossTests() {
     await tester.pumpWidget(_row(288));
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byType(Container).first).width, closeTo((288 - 32) / 5, 0.5));
+  });
+}
+
+// ---- cutout style: white cards, pictures shown whole ----
+void _registerCutoutStyleTests() {
+  testWidgets('each tile is a white rounded card holding the picture and the name', (tester) async {
+    await tester.pumpWidget(_row(343, count: 6));
+    final card = tester.widget<Container>(
+      find.ancestor(of: find.byType(CategoryImage).first, matching: find.byType(Container)).first,
+    );
+    final decoration = card.decoration! as BoxDecoration;
+    expect(decoration.color, Colors.white);
+    expect(decoration.borderRadius, isNotNull);
+    // the name is inside the same card as the picture
+    expect(
+      find.descendant(
+        of: find.ancestor(of: find.byType(CategoryImage).first, matching: find.byType(Container)).first,
+        matching: find.text('منظفات ومستلزمات المنزل'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('pictures are shown whole (contain), never cropped', (tester) async {
+    await tester.pumpWidget(_row(343, count: 6));
+    expect(tester.widget<CategoryImage>(find.byType(CategoryImage).first).fit, BoxFit.contain);
+  });
+
+  testWidgets('the selected card gets a navy border', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CategoryBubbleRow(
+            categories: const [Category(id: '1', name: 'A', nameAr: 'أ'), Category(id: '2', name: 'B', nameAr: 'ب')],
+            selectedCategoryId: '2',
+            onSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    final borders = tester
+        .widgetList<Container>(find.byType(Container))
+        .map((c) => c.decoration)
+        .whereType<BoxDecoration>()
+        .map((d) => d.border)
+        .whereType<Border>()
+        .map((b) => b.top.width)
+        .toList();
+    expect(borders.where((w) => w == 1.5).length, 1);
+  });
+
+  testWidgets('no overflow at 2x text scale with long names', (tester) async {
+    await tester.pumpWidget(_row(343, scale: 2));
+    expect(tester.takeException(), isNull);
   });
 }
