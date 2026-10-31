@@ -99,7 +99,8 @@ void main() {
   testWidgets('the discount badge and price still show over the fallback', (tester) async {
     await tester.pumpWidget(_app(_product(discount: 1.0)));
     await _settle(tester);
-    expect(find.textContaining('% OFF'), findsOneWidget);
+    expect(find.byKey(ProductCard.discountTagKey), findsOneWidget);
+    expect(find.textContaining('خصم'), findsOneWidget);
     expect(find.byKey(ProductImage.fallbackKey), findsOneWidget);
   });
 

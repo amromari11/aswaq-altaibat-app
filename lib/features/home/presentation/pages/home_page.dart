@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
-
-import '../../../banners/presentation/banner_actions.dart';
-import '../../../banners/presentation/providers/banner_providers.dart';
-import '../../../banners/presentation/widgets/promo_banner_carousel.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/curved_header_clipper.dart';
+import '../../../banners/presentation/banner_actions.dart';
+import '../../../banners/presentation/providers/banner_providers.dart';
+import '../../../banners/presentation/widgets/promo_banner_carousel.dart';
 import '../../../categories/presentation/providers/selected_category_provider.dart';
+import '../../../recommendations/presentation/providers/recommendations_providers.dart';
+import '../../../recommendations/presentation/widgets/recommendations_row.dart';
+import '../../../search/data/voice_search_service.dart';
+import '../../../search/presentation/providers/search_input_providers.dart';
 import '../../domain/entities/product.dart';
 import '../providers/home_providers.dart';
 import '../widgets/category_bubble_row.dart';
-import '../widgets/home_brand_bar.dart';
+import '../widgets/delivery_header.dart';
 import '../widgets/home_search_bar.dart';
-import '../widgets/location_header.dart';
 import '../widgets/order_again_row.dart';
 import '../widgets/product_grid.dart';
-import '../../../recommendations/presentation/providers/recommendations_providers.dart';
-import '../../../recommendations/presentation/widgets/recommendations_row.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -30,11 +30,60 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   final _searchController = TextEditingController();
+  late final VoiceSearchService _voice;
+  bool _listening = false;
+  bool _showAllBestSellers = false;
+
+  /// Best sellers shown before "عرض الكل".
+  static const _bestSellersPreview = 6;
+
+  @override
+  void initState() {
+    super.initState();
+    // Read here, not in dispose(): `ref` can't be used once the page is going away.
+    _voice = ref.read(voiceSearchServiceProvider);
+  }
 
   @override
   void dispose() {
+    // Stop the microphone if the page goes away mid-sentence.
+    if (_listening) _voice.stop();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _setSearch(String text) => ref.read(searchQueryProvider.notifier).state = text;
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _toggleVoice() async {
+    final voice = _voice;
+    if (_listening) {
+      await voice.stop();
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+    final started = await voice.start(
+      onWords: (words, finished) {
+        if (mounted && words.trim().isNotEmpty) _setSearch(words.trim());
+      },
+      onStopped: () {
+        if (mounted) setState(() => _listening = false);
+      },
+    );
+    if (!mounted) return;
+    if (started) {
+      setState(() => _listening = true);
+    } else {
+      _showMessage('البحث الصوتي غير متاح — اسمح باستخدام الميكروفون أو اكتب ما تبحث عنه.');
+    }
+  }
+
+  Future<void> _scanBarcode() async {
+    final code = await context.push<String>('/scan');
+    if (code != null && code.trim().isNotEmpty && mounted) _setSearch(code.trim());
   }
 
   @override
@@ -44,17 +93,30 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
     return CustomScrollView(
       slivers: [
-        const SliverToBoxAdapter(child: HomeBrandBar()),
-        SliverToBoxAdapter(child: _buildHeader()),
+        const SliverToBoxAdapter(child: DeliveryHeader()),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            child: HomeSearchBar(
+              controller: _searchController,
+              listening: _listening,
+              onChanged: _setSearch,
+              onSubmitted: _setSearch,
+              onVoice: _toggleVoice,
+              onScan: _scanBarcode,
+            ),
+          ),
+        ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 110),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               _buildBanners(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 22),
               _buildCategories(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 22),
               _buildOrderAgain(),
+              _buildBestSellers(),
               _buildProductSection(),
               const SizedBox(height: 24),
               RecommendationsRow(title: 'قد يعجبك أيضاً', provider: homeRecommendationsProvider),
@@ -62,38 +124,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildHeader() {
-    return ClipPath(
-      clipper: const CurvedHeaderClipper(),
-      child: Container(
-        // Top inset is handled by HomeBrandBar above this, not here.
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-        decoration: const BoxDecoration(gradient: AppColors.headerGradient),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const LocationHeader(),
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.notifications_none, color: Colors.white),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            HomeSearchBar(
-              controller: _searchController,
-              onChanged: (value) => ref.read(searchQueryProvider.notifier).state = value,
-              onSubmitted: (value) => ref.read(searchQueryProvider.notifier).state = value,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -110,7 +140,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           }
         },
       ),
-      loading: () => const _ShimmerBlock(height: 150, borderRadius: 16),
+      loading: () => const _ShimmerBlock(height: 172, borderRadius: 24),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -130,7 +160,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           },
         );
       },
-      loading: () => const _ShimmerBlock(height: 92, borderRadius: 12),
+      loading: () => const _ShimmerBlock(height: 92, borderRadius: 16),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -151,6 +181,34 @@ class _HomePageState extends ConsumerState<HomePage> {
         );
       },
       orElse: () => const SizedBox.shrink(),
+    );
+  }
+
+  /// "الأكثر مبيعاً": what other customers buy most (last 30 days). Hidden while
+  /// searching or browsing a category, and when the server has none to show.
+  Widget _buildBestSellers() {
+    if (ref.watch(searchQueryProvider).trim().isNotEmpty || ref.watch(selectedCategoryProvider) != null) {
+      return const SizedBox.shrink();
+    }
+    final best = ref.watch(bestSellersProvider).valueOrNull;
+    if (best == null || best.isEmpty) return const SizedBox.shrink();
+
+    final canExpand = best.length > _bestSellersPreview;
+    final shown = _showAllBestSellers ? best : best.take(_bestSellersPreview).toList();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            title: 'الأكثر مبيعاً',
+            actionLabel: canExpand ? (_showAllBestSellers ? 'عرض أقل' : 'عرض الكل') : null,
+            onAction: () => setState(() => _showAllBestSellers = !_showAllBestSellers),
+          ),
+          const SizedBox(height: 12),
+          ProductGrid(products: shown),
+        ],
+      ),
     );
   }
 
@@ -186,6 +244,8 @@ class _HomePageState extends ConsumerState<HomePage> {
         title: 'تصفح منتجاتنا',
         asyncProducts: ref.watch(latestProductsProvider),
         emptyMessage: 'لا توجد منتجات حالياً.',
+        // Not the same products again right under "الأكثر مبيعاً".
+        exclude: {for (final p in ref.watch(bestSellersProvider).valueOrNull ?? const <Product>[]) p.id},
       );
     }
 
@@ -200,6 +260,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     required String title,
     required AsyncValue<List<Product>> asyncProducts,
     required String emptyMessage,
+    Set<String> exclude = const {},
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,7 +268,10 @@ class _HomePageState extends ConsumerState<HomePage> {
         _SectionHeader(title: title),
         const SizedBox(height: 12),
         asyncProducts.when(
-          data: (products) => _productGridOrEmpty(products, emptyMessage),
+          data: (products) => _productGridOrEmpty(
+            exclude.isEmpty ? products : products.where((p) => !exclude.contains(p.id)).toList(),
+            emptyMessage,
+          ),
           loading: () => const _ShimmerGrid(),
           error: (_, __) => const _ErrorMessage(),
         ),
@@ -229,13 +293,29 @@ class _HomePageState extends ConsumerState<HomePage> {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
+  const _SectionHeader({required this.title, this.actionLabel, this.onAction});
 
   final String title;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    return Text(title, style: AppTextStyles.h2);
+    return Row(
+      children: [
+        Expanded(child: Text(title, style: AppTextStyles.h2.copyWith(fontWeight: FontWeight.w800))),
+        if (actionLabel != null)
+          TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.accent,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+            ),
+            child: Text(actionLabel!, style: AppTextStyles.caption.copyWith(color: AppColors.accent, fontWeight: FontWeight.w800)),
+          ),
+      ],
+    );
   }
 }
 
@@ -274,9 +354,9 @@ class _ShimmerGrid extends StatelessWidget {
         crossAxisCount: 2,
         mainAxisSpacing: 14,
         crossAxisSpacing: 14,
-        childAspectRatio: 0.68,
+        childAspectRatio: 0.62,
       ),
-      itemBuilder: (context, index) => const _ShimmerBlock(height: 260, borderRadius: 16),
+      itemBuilder: (context, index) => const _ShimmerBlock(height: 260, borderRadius: 20),
     );
   }
 }

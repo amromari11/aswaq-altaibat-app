@@ -1,3 +1,4 @@
+import '../../../cart/domain/entities/fulfillment.dart';
 import 'order_ref.dart';
 import 'order_status.dart';
 
@@ -42,10 +43,41 @@ class DriverLocation {
 
   @override
   bool operator ==(Object other) =>
-      other is DriverLocation && other.latitude == latitude && other.longitude == longitude && other.updatedAt == updatedAt;
+      other is DriverLocation &&
+      other.latitude == latitude &&
+      other.longitude == longitude &&
+      other.updatedAt == updatedAt;
 
   @override
   int get hashCode => Object.hash(latitude, longitude, updatedAt);
+}
+
+/// Who is delivering and how to reach them (backend 016). Only present while
+/// the order is out for delivery, and only if the shop entered it.
+class DriverInfo {
+  const DriverInfo({this.name, this.phone});
+
+  final String? name;
+
+  /// E.164, e.g. +962791112233.
+  final String? phone;
+
+  bool get hasPhone => phone != null && phone!.isNotEmpty;
+
+  factory DriverInfo.fromJson(Map<String, dynamic> json) {
+    String? clean(Object? v) {
+      final text = (v as String?)?.trim();
+      return (text == null || text.isEmpty) ? null : text;
+    }
+
+    return DriverInfo(name: clean(json['name']), phone: clean(json['phone']));
+  }
+
+  @override
+  bool operator ==(Object other) => other is DriverInfo && other.name == name && other.phone == phone;
+
+  @override
+  int get hashCode => Object.hash(name, phone);
 }
 
 /// One order as `get_order_tracking` returns it.
@@ -68,6 +100,9 @@ class OrderTracking {
     this.deliveryLat,
     this.deliveryLng,
     this.driver,
+    this.orderType = OrderType.delivery,
+    this.scheduledTime,
+    this.driverInfo,
   });
 
   final String id;
@@ -94,10 +129,32 @@ class OrderTracking {
   /// *and* the driver has reported a position.
   final DriverLocation? driver;
 
+  /// Delivery or pickup (orders before backend 015 are deliveries).
+  final OrderType orderType;
+
+  /// The chosen slot's start; null = as soon as possible.
+  final DateTime? scheduledTime;
+
+  /// Name and phone of the driver, while the order is out for delivery.
+  final DriverInfo? driverInfo;
+
+  bool get isPickup => orderType == OrderType.pickup;
+
   bool get hasDeliveryPin => deliveryLat != null && deliveryLng != null;
 
   /// This order with the driver moved (or [location] cleared with null).
-  OrderTracking withDriver(DriverLocation? location) => OrderTracking(
+  OrderTracking withDriver(DriverLocation? location) => _copy(driver: location, keepDriver: false);
+
+  /// This order with the driver's name and phone set (or cleared with null).
+  OrderTracking withDriverInfo(DriverInfo? info) => _copy(driverInfo: info, keepDriverInfo: false);
+
+  OrderTracking _copy({
+    DriverLocation? driver,
+    bool keepDriver = true,
+    DriverInfo? driverInfo,
+    bool keepDriverInfo = true,
+  }) =>
+      OrderTracking(
         id: id,
         status: status,
         createdAt: createdAt,
@@ -114,12 +171,17 @@ class OrderTracking {
         paymentMethod: paymentMethod,
         deliveryLat: deliveryLat,
         deliveryLng: deliveryLng,
-        driver: location,
+        driver: keepDriver ? this.driver : driver,
+        orderType: orderType,
+        scheduledTime: scheduledTime,
+        driverInfo: keepDriverInfo ? this.driverInfo : driverInfo,
       );
 
   /// When the order is expected to arrive: placed-at plus the zone's ETA.
-  DateTime? get expectedBy =>
-      etaMinutes == null ? null : createdAt.add(Duration(minutes: etaMinutes!));
+  /// Not for pickup or scheduled orders — those show their slot instead.
+  DateTime? get expectedBy => etaMinutes == null || isPickup || scheduledTime != null
+      ? null
+      : createdAt.add(Duration(minutes: etaMinutes!));
 
   factory OrderTracking.fromJson(Map<String, dynamic> json) => OrderTracking(
         id: json['id'] as String,
@@ -137,6 +199,13 @@ class OrderTracking {
         paymentMethod: (json['payment_method'] as String?) ?? 'cash',
         deliveryLat: (json['delivery_lat'] as num?)?.toDouble(),
         deliveryLng: (json['delivery_lng'] as num?)?.toDouble(),
+        driverInfo: json['driver_info'] == null
+            ? null
+            : DriverInfo.fromJson(Map<String, dynamic>.from(json['driver_info'] as Map)),
+        orderType: OrderType.fromWire(json['order_type'] as String?),
+        scheduledTime: json['scheduled_time'] == null
+            ? null
+            : DateTime.parse(json['scheduled_time'] as String),
         driver: json['driver'] == null
             ? null
             : DriverLocation.fromJson(Map<String, dynamic>.from(json['driver'] as Map)),
@@ -156,6 +225,8 @@ class OrderSummary {
     required this.total,
     required this.itemCount,
     this.zoneName,
+    this.orderType = OrderType.delivery,
+    this.scheduledTime,
   });
 
   final OrderRef ref;
@@ -164,4 +235,6 @@ class OrderSummary {
   final double total;
   final int itemCount;
   final String? zoneName;
+  final OrderType orderType;
+  final DateTime? scheduledTime;
 }

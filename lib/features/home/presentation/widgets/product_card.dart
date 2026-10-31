@@ -5,35 +5,42 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
+import '../../../location/presentation/providers/delivery_eta_provider.dart';
 import '../../domain/entities/product.dart';
 import 'product_image.dart';
 
-/// A single product tile for the home/category grid: picture (or its category's), discount
-/// badge, bilingual-ready name, JOD price (with strikethrough original
-/// when discounted), and a quantity stepper wired straight to the cart.
+/// A single product tile for the home/category grid: picture (or its
+/// category's), discount tag, delivery-time badge, name, price (with the
+/// original struck through when discounted) and an add / `− 1 +` control wired
+/// straight to the cart.
 class ProductCard extends ConsumerWidget {
   const ProductCard({super.key, required this.product, this.onTap});
 
   final Product product;
   final VoidCallback? onTap;
 
+  static const discountTagKey = ValueKey('product-discount-tag');
+  static const etaBadgeKey = ValueKey('product-eta-badge');
+  static const addKey = ValueKey('product-add');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final quantity = ref.watch(cartProvider.select(
       (cart) => cart[product.id]?.quantity ?? 0,
     ));
+    final eta = ref.watch(deliveryEtaProvider);
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+              color: AppColors.primary.withValues(alpha: 0.07),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -47,10 +54,10 @@ class ProductCard extends ConsumerWidget {
                   children: [
                     Positioned.fill(child: ProductImage(product: product)),
                     if (product.hasDiscount)
-                      Positioned(
+                      PositionedDirectional(
                         top: 8,
-                        right: 8,
-                        child: _DiscountBadge(percent: product.discountPercent),
+                        start: 8,
+                        child: _DiscountTag(percent: product.discountPercent),
                       ),
                     if (product.isOutOfStock)
                       Positioned.fill(
@@ -75,18 +82,17 @@ class ProductCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _MetaRow(eta: eta, unit: product.unit),
+                  const SizedBox(height: 3),
                   Text(
                     product.nameAr,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodyMedium,
+                    style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w800, height: 1.25),
                   ),
-                  if (product.unit != null) ...[
-                    const SizedBox(height: 2),
-                    Text(product.unit!, style: AppTextStyles.caption),
-                  ],
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Expanded(
                         child: Column(
@@ -94,7 +100,7 @@ class ProductCard extends ConsumerWidget {
                           children: [
                             Text(
                               CurrencyFormatter.jod(product.displayPrice),
-                              style: AppTextStyles.price,
+                              style: AppTextStyles.price.copyWith(fontSize: 14),
                             ),
                             if (product.hasDiscount)
                               Text(
@@ -121,24 +127,67 @@ class ProductCard extends ConsumerWidget {
   }
 }
 
-class _DiscountBadge extends StatelessWidget {
-  const _DiscountBadge({required this.percent});
+/// "⏱ 30–35 د · لتر": how long delivery takes, and the pack size.
+class _MetaRow extends StatelessWidget {
+  const _MetaRow({required this.eta, required this.unit});
+
+  final EtaRange? eta;
+  final String? unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUnit = unit != null && unit!.trim().isNotEmpty;
+    if (eta == null && !hasUnit) return const SizedBox.shrink();
+    return Row(
+      children: [
+        if (eta != null) ...[
+          const Icon(Icons.schedule, size: 13, color: AppColors.textSecondary),
+          const SizedBox(width: 3),
+          Flexible(
+            child: Text(
+              etaRangeLabel(eta!, short: true),
+              key: ProductCard.etaBadgeKey,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+        if (eta != null && hasUnit)
+          Text(' · ', style: AppTextStyles.caption.copyWith(fontSize: 11)),
+        if (hasUnit)
+          Flexible(
+            child: Text(
+              unit!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(fontSize: 11),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _DiscountTag extends StatelessWidget {
+  const _DiscountTag({required this.percent});
 
   final int percent;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      key: ProductCard.discountTagKey,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: AppColors.discount,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        '$percent% OFF',
+        'خصم $percent%',
         style: AppTextStyles.caption.copyWith(
           color: Colors.white,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           fontSize: 11,
         ),
       ),
@@ -165,21 +214,42 @@ class _QuantityStepper extends ConsumerWidget {
       final added = ref.read(cartProvider.notifier).add(product);
       if (!added) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text('الكمية المتوفرة من "${product.nameAr}" هي ${product.stockQuantity} فقط.')),
+          SnackBar(content: Text('الكمية المتوفرة من "${product.nameAr}" هي ${product.stockQuantity} فقط.')),
         );
       }
     }
 
+    // Not in the cart yet: an outlined "add" pill.
     if (quantity == 0) {
-      return _StepperButton(icon: Icons.add, onTap: handleAdd, filled: true);
+      return InkWell(
+        key: ProductCard.addKey,
+        onTap: handleAdd,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.accent, width: 1.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add, size: 16, color: AppColors.accent),
+              const SizedBox(width: 2),
+              Text('أضف', style: AppTextStyles.caption.copyWith(color: AppColors.accent, fontWeight: FontWeight.w800)),
+            ],
+          ),
+        ),
+      );
     }
 
+    // In the cart: a filled "− 1 +" pill.
     return Container(
+      height: 34,
       decoration: BoxDecoration(
         color: AppColors.accent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -189,11 +259,11 @@ class _QuantityStepper extends ConsumerWidget {
             onTap: () => ref.read(cartProvider.notifier).decrement(product),
           ),
           SizedBox(
-            width: 20,
+            width: 22,
             child: Text(
               '$quantity',
               textAlign: TextAlign.center,
-              style: AppTextStyles.bodyMedium.copyWith(color: Colors.white),
+              style: AppTextStyles.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
             ),
           ),
           _StepperButton(icon: Icons.add, onTap: handleAdd),
@@ -204,31 +274,21 @@ class _QuantityStepper extends ConsumerWidget {
 }
 
 class _StepperButton extends StatelessWidget {
-  const _StepperButton({required this.icon, required this.onTap, this.filled = false});
+  const _StepperButton({required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;
-  final bool filled;
 
   @override
   Widget build(BuildContext context) {
-    final button = InkWell(
+    return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Icon(icon, size: 18, color: filled ? Colors.white : Colors.white),
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: 32,
+        height: 34,
+        child: Icon(icon, size: 18, color: Colors.white),
       ),
-    );
-
-    if (!filled) return button;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.accent,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: button,
     );
   }
 }

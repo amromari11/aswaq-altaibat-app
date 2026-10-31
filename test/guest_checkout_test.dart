@@ -5,9 +5,11 @@ import 'package:aswaq_altaibat/features/account/presentation/providers/profile_p
 import 'package:aswaq_altaibat/features/cart/data/repositories/cart_repository.dart';
 import 'package:aswaq_altaibat/features/cart/data/repositories/checkout_repository.dart';
 import 'package:aswaq_altaibat/features/cart/domain/entities/cart_item.dart';
+import 'package:aswaq_altaibat/features/cart/domain/entities/fulfillment.dart';
 import 'package:aswaq_altaibat/features/cart/presentation/pages/checkout_page.dart';
 import 'package:aswaq_altaibat/features/cart/presentation/providers/cart_provider.dart';
 import 'package:aswaq_altaibat/features/cart/presentation/providers/checkout_provider.dart';
+import 'package:aswaq_altaibat/features/cart/presentation/providers/fulfillment_providers.dart';
 import 'package:aswaq_altaibat/features/home/domain/entities/product.dart';
 import 'package:aswaq_altaibat/features/location/domain/entities/delivery_zone.dart';
 import 'package:aswaq_altaibat/features/orders/data/local/my_orders_store.dart';
@@ -32,6 +34,22 @@ const _product = Product(id: 'p1', categoryId: 'c', name: 'n', nameAr: 'منتج
 
 final _address = SavedAddress(id: 'a1', label: 'المنزل', zoneId: _zone.id, details: 'شارع الجيش', isDefault: true);
 
+const _store = StoreSettings(
+  branchName: 'أسواق الطيبات - فرع الزرقاء',
+  branchAddress: 'الزرقاء، شارع الملك عبدالله',
+  branchPhone: '0791112222',
+  latitude: 32.073313,
+  longitude: 36.095312,
+  opensAtMinutes: 8 * 60,
+  closesAtMinutes: 23 * 60,
+);
+
+/// Monday 2 Nov 2026, 10:30 in Amman (UTC+3): open, first slot 12:00.
+final _morning = DateTime.utc(2026, 11, 2, 7, 30);
+
+/// 02:00 in Amman: closed.
+final _night = DateTime.utc(2026, 11, 1, 23, 0);
+
 const _googleUser = User(
   id: 'user-1',
   appMetadata: {},
@@ -53,8 +71,10 @@ class _FakeCheckoutRepository implements CheckoutRepository {
     required String customerName,
     required String customerPhone,
     required List<CartItem> items,
-    required String deliveryAddress,
-    required String zoneId,
+    String? deliveryAddress,
+    String? zoneId,
+    OrderType orderType = OrderType.delivery,
+    DateTime? scheduledTime,
     String? addressId,
     double? deliveryLat,
     double? deliveryLng,
@@ -70,6 +90,8 @@ class _FakeCheckoutRepository implements CheckoutRepository {
       'address': deliveryAddress,
       'quantity': items.single.quantity,
       'token': trackingToken,
+      'type': orderType,
+      'scheduled': scheduledTime,
     });
     return 'order-1';
   }
@@ -121,6 +143,8 @@ void main() {
     SavedAddress? address,
     User? user,
     _FakeProfileRepository? profiles,
+    StoreSettings? settings,
+    DateTime? now,
   }) async {
     tester.view.physicalSize = const Size(800, 3200);
     tester.view.devicePixelRatio = 1;
@@ -149,6 +173,9 @@ void main() {
       cartItemsListProvider.overrideWithValue([const CartItem(product: _product, quantity: 3)]),
       cartSubtotalProvider.overrideWithValue(subtotal),
       freeDeliveryRemainingProvider.overrideWithValue(20 - subtotal),
+      // No store settings = a server without pickup/scheduling: delivery now only, as before.
+      storeSettingsProvider.overrideWith((ref) async => settings),
+      clockProvider.overrideWithValue(() => now ?? _morning),
     ]);
     addTearDown(container.dispose);
     await tester.pumpWidget(UncontrolledProviderScope(
@@ -369,5 +396,163 @@ void main() {
       await tapConfirm(tester);
       expect(orders.orders.single['addressId'], 'a1');
     });
+  });
+
+  group('delivery or pickup, now or later', () {
+    testWidgets('without store settings there is no toggle and no time choice (older server)',
+        (tester) async {
+      await pump(tester, address: _address);
+      expect(find.text('استلام من الفرع'), findsNothing);
+      expect(find.text('جدولة موعد'), findsNothing);
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+      expect(orders.orders.single['type'], OrderType.delivery);
+      expect(orders.orders.single['scheduled'], isNull);
+    });
+
+    testWidgets('delivery is the default; the zone fee and a way to add another address are shown',
+        (tester) async {
+      await pump(tester, address: _address, settings: _store);
+      expect(find.text('توصيل للمنزل'), findsWidgets);
+      expect(find.text('إضافة عنوان جديد'), findsOneWidget);
+      expect(find.textContaining('رسوم التوصيل إلى الزرقاء الجديدة: 1.500'), findsOneWidget);
+      expect(find.text('توصيل الآن'), findsOneWidget);
+
+      await tester.tap(find.text('إضافة عنوان جديد'));
+      await tester.pumpAndSettle();
+      expect(find.text('ADDRESS FORM'), findsOneWidget);
+    });
+
+    testWidgets('pickup: branch details instead of the address, fee 0, total = subtotal',
+        (tester) async {
+      await pump(tester, address: _address, settings: _store);
+      await tester.tap(find.text('استلام من الفرع').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('عنوان التوصيل'), findsNothing);
+      expect(find.text('أسواق الطيبات - فرع الزرقاء'), findsOneWidget);
+      expect(find.text('الزرقاء، شارع الملك عبدالله'), findsOneWidget);
+      expect(find.textContaining('08:00 – 23:00'), findsOneWidget);
+      expect(find.text('0791112222'), findsOneWidget);
+      expect(find.text('فتح الموقع في الخرائط'), findsOneWidget);
+      expect(find.text('0.000 د.أ'), findsOneWidget, reason: 'delivery fee row');
+      expect(find.text('10.000 د.أ'), findsNWidgets(2), reason: 'subtotal and total are equal');
+    });
+
+    testWidgets('pickup ignores the delivery minimum and needs no address', (tester) async {
+      await pump(tester,
+          subtotal: 2, settings: _store); // no address at all, below the zone minimum
+      await tester.tap(find.text('استلام من الفرع').first);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed, isNotNull);
+
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+      final order = orders.orders.single;
+      expect(order['type'], OrderType.pickup);
+      expect(order['zoneId'], isNull);
+      expect(order['address'], isNull);
+      expect(order['addressId'], isNull);
+      expect(order['scheduled'], isNull);
+    });
+
+    testWidgets('scheduling: pick a slot and it is sent as the slot start', (tester) async {
+      await pump(tester, address: _address, settings: _store);
+      await tester.tap(find.text('جدولة موعد'));
+      await tester.pumpAndSettle();
+      expect(find.text('اليوم'), findsOneWidget);
+      expect(find.text('غداً'), findsOneWidget);
+
+      await tester.tap(find.text('12:00 – 13:00'));
+      await tester.pumpAndSettle();
+      expect(find.text('اليوم 12:00 – 13:00'), findsWidgets);
+
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+      expect(orders.orders.single['scheduled'], DateTime.utc(2026, 11, 2, 9),
+          reason: '12:00 Amman = 09:00 UTC');
+    });
+
+    testWidgets('a slot on another day', (tester) async {
+      await pump(tester, address: _address, settings: _store);
+      await tester.tap(find.text('جدولة موعد'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('غداً'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('08:00 – 09:00'));
+      await tester.pumpAndSettle();
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+      expect(orders.orders.single['scheduled'], DateTime.utc(2026, 11, 3, 5));
+    });
+
+    testWidgets('choosing "schedule" without a slot asks for one', (tester) async {
+      await pump(tester, address: _address, settings: _store);
+      await tester.tap(find.text('جدولة موعد'));
+      await tester.pumpAndSettle();
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+      expect(find.text('الرجاء اختيار موعد التوصيل.'), findsOneWidget);
+      expect(orders.orders, isEmpty);
+    });
+
+    testWidgets('going back to "now" drops the chosen slot', (tester) async {
+      await pump(tester, address: _address, settings: _store);
+      await tester.tap(find.text('جدولة موعد'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('12:00 – 13:00'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('توصيل الآن'));
+      await tester.pumpAndSettle();
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+      expect(orders.orders.single['scheduled'], isNull);
+    });
+
+    testWidgets('store closed: "now" is unavailable and a slot must be picked', (tester) async {
+      await pump(tester, address: _address, settings: _store, now: _night);
+      expect(find.textContaining('المتجر مغلق الآن'), findsOneWidget);
+      expect(find.text('08:00 – 09:00'), findsOneWidget, reason: 'slots are shown straight away');
+
+      await fillCustomer(tester);
+      await tapConfirm(tester);
+      expect(find.text('الرجاء اختيار موعد التوصيل.'), findsOneWidget);
+      expect(orders.orders, isEmpty);
+
+      await tester.tap(find.text('08:00 – 09:00'));
+      await tester.pumpAndSettle();
+      await tapConfirm(tester);
+      expect(orders.orders.single['scheduled'], DateTime.utc(2026, 11, 2, 5));
+    });
+
+    testWidgets('pickup switched off in the store settings: no toggle', (tester) async {
+      const noPickup = StoreSettings(
+        branchName: 'x',
+        branchAddress: 'x',
+        latitude: 0,
+        longitude: 0,
+        opensAtMinutes: 0,
+        closesAtMinutes: 1440,
+        pickupEnabled: false,
+      );
+      await pump(tester, address: _address, settings: noPickup);
+      expect(find.text('استلام من الفرع'), findsNothing);
+      expect(find.text('توصيل الآن'), findsOneWidget);
+    });
+
+    for (final entry in {
+      'store_closed': 'المتجر مغلق الآن',
+      'invalid_schedule': 'لم يعد متاحاً',
+      'pickup_unavailable': 'غير متاح حالياً',
+    }.entries) {
+      testWidgets('server says ${entry.key}: explained in Arabic', (tester) async {
+        await pump(tester, address: _address, settings: _store);
+        orders.rejectWith = entry.key;
+        await fillCustomer(tester);
+        await tapConfirm(tester);
+        expect(find.textContaining(entry.value), findsWidgets);
+        expect(orders.orders, isEmpty);
+      });
+    }
   });
 }

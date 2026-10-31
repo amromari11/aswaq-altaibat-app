@@ -19,6 +19,9 @@ class AppColors {
   static const Color background = Color(0xFFFFFFFF);
   static const Color surface = Color(0xFFFFFFFF);
 
+  /// Soft page background the white cards sit on (quick-commerce look).
+  static const Color canvas = Color(0xFFF4F6FB);
+
   static const Color textPrimary = Color(0xFF14192A);
   static const Color textSecondary = Color(0xFF6B7280);
   static const Color textMuted = Color(0xFF9CA3AF);

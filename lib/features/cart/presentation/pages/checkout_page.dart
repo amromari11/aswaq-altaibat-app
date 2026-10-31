@@ -16,6 +16,9 @@ import '../../../location/presentation/providers/location_providers.dart';
 import '../../../orders/data/local/my_orders_store.dart';
 import '../../../orders/domain/entities/order_ref.dart';
 import '../../data/repositories/checkout_repository.dart';
+import '../../domain/entities/fulfillment.dart';
+import '../providers/fulfillment_providers.dart';
+import '../widgets/fulfillment_sections.dart';
 import '../providers/cart_provider.dart';
 import '../providers/checkout_provider.dart';
 
@@ -70,16 +73,58 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return null;
   }
 
+  /// Delivery unless pickup is both chosen and offered by the store.
+  OrderType _orderType() {
+    final settings = ref.read(storeSettingsProvider).valueOrNull;
+    final chosen = ref.read(orderTypeProvider);
+    return settings != null && settings.pickupEnabled ? chosen : OrderType.delivery;
+  }
+
+  /// Scheduling is in effect when chosen, or forced while the store is closed.
+  bool _scheduleMode(DateTime now) {
+    final planner = ref.read(slotPlannerProvider);
+    if (planner == null || planner.days(now).isEmpty) return false;
+    return ref.read(wantsScheduleProvider) || !planner.isOpenAt(now);
+  }
+
   Future<void> _confirmOrder({required CustomerInfo? saved, required bool entering}) async {
+    final orderType = _orderType();
+    final pickup = orderType == OrderType.pickup;
     final address = ref.read(selectedAddressProvider);
     final zone = ref.read(selectedZoneProvider);
-    if (address == null || zone == null) {
-      _showMessage('الرجاء اختيار عنوان التوصيل.');
-      return;
+    if (!pickup) {
+      if (address == null || zone == null) {
+        _showMessage('الرجاء اختيار عنوان التوصيل.');
+        return;
+      }
+      if (ref.read(cartSubtotalProvider) < zone.minOrderJod) {
+        _showMessage(
+            'الحد الأدنى للطلب في ${zone.nameAr} هو ${CurrencyFormatter.jod(zone.minOrderJod)}.');
+        return;
+      }
     }
-    if (ref.read(cartSubtotalProvider) < zone.minOrderJod) {
-      _showMessage('الحد الأدنى للطلب في ${zone.nameAr} هو ${CurrencyFormatter.jod(zone.minOrderJod)}.');
-      return;
+
+    // When: as soon as possible, or a slot that is still on offer.
+    final now = ref.read(clockProvider)();
+    final planner = ref.read(slotPlannerProvider);
+    DateTime? scheduledTime;
+    if (planner != null) {
+      if (_scheduleMode(now)) {
+        final slot = ref.read(scheduledSlotProvider);
+        if (slot == null) {
+          _showMessage(pickup ? 'الرجاء اختيار موعد الاستلام.' : 'الرجاء اختيار موعد التوصيل.');
+          return;
+        }
+        if (!planner.isStillOffered(slot, now)) {
+          ref.read(scheduledSlotProvider.notifier).state = null;
+          _showMessage('الموعد المختار لم يعد متاحاً — اختر موعداً آخر.');
+          return;
+        }
+        scheduledTime = slot.start;
+      } else if (!planner.isOpenAt(now)) {
+        _showMessage('المتجر مغلق الآن — اختر موعداً لاحقاً.');
+        return;
+      }
     }
 
     // No account needed: either use what's remembered, or validate what was
@@ -102,13 +147,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final orderId = await ref.read(checkoutControllerProvider.notifier).placeOrder(
           customerName: customer.name,
           customerPhone: customer.phone,
-          deliveryAddress: '${zone.nameAr} - ${address.details}',
-          deliveryLat: address.latitude,
-          deliveryLng: address.longitude,
+          orderType: orderType,
+          scheduledTime: scheduledTime,
+          deliveryAddress: pickup ? null : '${zone!.nameAr} - ${address!.details}',
+          deliveryLat: pickup ? null : address!.latitude,
+          deliveryLng: pickup ? null : address!.longitude,
           notes: _notesController.text,
-          zoneId: zone.id,
+          zoneId: pickup ? null : zone!.id,
           // A local-only (guest) address has no server row to reference.
-          addressId: address.isPersisted ? address.id : null,
+          addressId: pickup || !address!.isPersisted ? null : address.id,
           trackingToken: trackingToken,
         );
 
@@ -123,7 +170,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // A signed-in customer's profile phone follows the number they just
       // ordered with. Best effort: the order is already placed, and the
       // profile column is unique, so a clash must not surface as an error.
-      if (ref.read(currentUserProvider) != null && ref.read(profilePhoneProvider).valueOrNull != customer.phone) {
+      if (ref.read(currentUserProvider) != null &&
+          ref.read(profilePhoneProvider).valueOrNull != customer.phone) {
         try {
           await savePhone(ref, customer.phone);
         } catch (_) {}
@@ -140,8 +188,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final remaining = ref.watch(freeDeliveryRemainingProvider);
     final address = ref.watch(selectedAddressProvider);
     final zone = ref.watch(selectedZoneProvider);
-    final deliveryFee = remaining <= 0 ? 0.0 : (zone?.deliveryFeeJod ?? AppConfig.deliveryFeeJod);
-    final belowMinimum = zone != null && subtotal < zone.minOrderJod;
+    final settings = ref.watch(storeSettingsProvider).valueOrNull;
+    final planner = ref.watch(slotPlannerProvider);
+    final now = ref.watch(clockProvider)();
+    final pickupOffered = settings != null && settings.pickupEnabled;
+    final orderType = pickupOffered ? ref.watch(orderTypeProvider) : OrderType.delivery;
+    final pickup = orderType == OrderType.pickup;
+    ref.watch(wantsScheduleProvider);
+    final scheduleMode = _scheduleMode(now);
+    final slot = ref.watch(scheduledSlotProvider);
+    final deliveryFee =
+        pickup ? 0.0 : (remaining <= 0 ? 0.0 : (zone?.deliveryFeeJod ?? AppConfig.deliveryFeeJod));
+    final belowMinimum = !pickup && zone != null && subtotal < zone.minOrderJod;
     final total = subtotal + deliveryFee;
     final checkoutState = ref.watch(checkoutControllerProvider);
     final isSignedIn = ref.watch(currentUserProvider) != null;
@@ -186,28 +244,75 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('عنوان التوصيل', style: AppTextStyles.h3),
-            const SizedBox(height: 10),
-            _AddressSelector(
-              onChange: () => context.push('/addresses', extra: true),
-              onAdd: () => context.push('/address-form'),
-              label: address?.label,
-              subtitle: address == null ? null : '${zone?.nameAr ?? ''} - ${address.details}',
-              eta: zone?.etaMinutes,
-            ),
-            if (belowMinimum)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'الحد الأدنى للطلب في ${zone.nameAr} هو ${CurrencyFormatter.jod(zone.minOrderJod)}.',
-                  style: AppTextStyles.caption.copyWith(color: AppColors.accent),
-                ),
+            if (pickupOffered) ...[
+              OrderTypeToggle(
+                value: orderType,
+                onChanged: (type) => ref.read(orderTypeProvider.notifier).state = type,
               ),
+              const SizedBox(height: 20),
+            ],
+            if (pickup) ...[
+              Text('الاستلام من', style: AppTextStyles.h3),
+              const SizedBox(height: 10),
+              PickupBranchCard(settings: settings!),
+            ] else ...[
+              Text('عنوان التوصيل', style: AppTextStyles.h3),
+              const SizedBox(height: 10),
+              _AddressSelector(
+                onChange: () => context.push('/addresses', extra: true),
+                onAdd: () => context.push('/address-form'),
+                label: address?.label,
+                subtitle: address == null ? null : '${zone?.nameAr ?? ''} - ${address.details}',
+                eta: zone?.etaMinutes,
+              ),
+              if (address != null)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: () => context.push('/address-form'),
+                    icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+                    label: const Text('إضافة عنوان جديد'),
+                  ),
+                ),
+              if (zone != null)
+                Text(
+                  deliveryFee == 0
+                      ? 'رسوم التوصيل إلى ${zone.nameAr}: مجاني لهذا الطلب'
+                      : 'رسوم التوصيل إلى ${zone.nameAr}: ${CurrencyFormatter.jod(deliveryFee)}',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                ),
+              if (belowMinimum)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'الحد الأدنى للطلب في ${zone.nameAr} هو ${CurrencyFormatter.jod(zone.minOrderJod)}.',
+                    style: AppTextStyles.caption.copyWith(color: AppColors.accent),
+                  ),
+                ),
+            ],
+            if (planner != null) ...[
+              const SizedBox(height: 20),
+              Text(pickup ? 'موعد الاستلام' : 'موعد التوصيل', style: AppTextStyles.h3),
+              const SizedBox(height: 10),
+              TimeChoiceSection(
+                planner: planner,
+                now: now,
+                orderType: orderType,
+                scheduled: scheduleMode,
+                slot: slot,
+                etaMinutes: zone?.etaMinutes,
+                onAsap: () => ref.read(wantsScheduleProvider.notifier).state = false,
+                onSchedule: () => ref.read(wantsScheduleProvider.notifier).state = true,
+                onSlot: (picked) => ref.read(scheduledSlotProvider.notifier).state = picked,
+              ),
+            ],
             const SizedBox(height: 20),
             Text('بيانات التواصل', style: AppTextStyles.h3),
             const SizedBox(height: 4),
             Text(
-              'سيتصل بك السائق على هذا الرقم عند التوصيل — لا نحتاج حساباً أو رمز تحقق.',
+              pickup
+                  ? 'سنتصل بك على هذا الرقم عند تجهيز طلبك — لا نحتاج حساباً أو رمز تحقق.'
+                  : 'سيتصل بك السائق على هذا الرقم عند التوصيل — لا نحتاج حساباً أو رمز تحقق.',
               style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 10),
@@ -293,13 +398,27 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               ),
               child: Column(
                 children: [
+                  _SummaryRow(
+                      label: 'طريقة الاستلام', value: pickup ? 'استلام من الفرع' : 'توصيل للمنزل'),
+                  if (planner != null) ...[
+                    const SizedBox(height: 8),
+                    _SummaryRow(
+                      label: 'الموعد',
+                      value: scheduleMode
+                          ? (slot == null ? 'لم يُحدَّد بعد' : planner.describe(slot, now))
+                          : 'في أقرب وقت',
+                    ),
+                  ],
+                  const SizedBox(height: 8),
                   _SummaryRow(label: 'عدد المنتجات', value: '${items.length}'),
                   const SizedBox(height: 8),
                   _SummaryRow(label: 'المجموع الفرعي', value: CurrencyFormatter.jod(subtotal)),
                   const SizedBox(height: 8),
                   _SummaryRow(
                     label: 'رسوم التوصيل',
-                    value: deliveryFee == 0 ? 'مجاني' : CurrencyFormatter.jod(deliveryFee),
+                    value: pickup
+                        ? CurrencyFormatter.jod(0)
+                        : (deliveryFee == 0 ? 'مجاني' : CurrencyFormatter.jod(deliveryFee)),
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 10),
@@ -399,9 +518,11 @@ class _AddressSelector extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label!, style: AppTextStyles.bodyMedium),
-                Text(subtitle ?? '', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                Text(subtitle ?? '',
+                    style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
                 if (eta != null)
-                  Text('الوقت المتوقع ~$eta دقيقة', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                  Text('الوقت المتوقع ~$eta دقيقة',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
               ],
             ),
           ),
@@ -466,6 +587,16 @@ String _rejectionMessage(String code) {
       return 'منطقة التوصيل المختارة لم تعد متاحة. اختر عنواناً آخر.';
     case 'too_many_orders':
       return 'تم تقديم عدة طلبات خلال وقت قصير. حاول مرة أخرى بعد قليل.';
+    case 'store_closed':
+      return 'المتجر مغلق الآن — اختر موعداً لاحقاً.';
+    case 'invalid_schedule':
+      return 'الموعد المختار لم يعد متاحاً — اختر موعداً آخر.';
+    case 'pickup_unavailable':
+      return 'الاستلام من الفرع غير متاح حالياً — اختر التوصيل.';
+    case 'scheduling_unavailable':
+      return 'جدولة المواعيد غير متاحة حالياً — اطلب للتوصيل الآن.';
+    case 'invalid_order_type':
+      return 'طريقة الاستلام غير صحيحة. حاول مرة أخرى.';
     default:
       return 'تعذر إتمام الطلب. حاول مرة أخرى.';
   }

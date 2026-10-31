@@ -21,6 +21,9 @@ class OrderMap extends StatefulWidget {
     this.driverStale = false,
     this.driverAssumed = false,
     this.tileProvider,
+    this.borderRadius = 16,
+    this.topInset = 0,
+    this.bottomInset = 0,
   });
 
   final LatLng store;
@@ -43,6 +46,15 @@ class OrderMap extends StatefulWidget {
   /// Tests pass a blank provider so no network tile requests are made.
   final TileProvider? tileProvider;
 
+  /// 0 when the map fills the screen behind other widgets.
+  final double borderRadius;
+
+  /// Parts of the map that other widgets cover (cards on top, a sheet below):
+  /// the pins are framed clear of them, and the credit and the recenter
+  /// button stay in the visible part.
+  final double topInset;
+  final double bottomInset;
+
   @override
   State<OrderMap> createState() => _OrderMapState();
 }
@@ -57,7 +69,7 @@ class _OrderMapState extends State<OrderMap> {
   CameraFit _fit() => CameraFit.bounds(
         bounds: LatLngBounds.fromPoints(_points),
         // Extra room on top for the marker labels.
-        padding: const EdgeInsets.fromLTRB(48, 84, 48, 48),
+        padding: EdgeInsets.fromLTRB(48, 84 + widget.topInset, 48, 48 + widget.bottomInset),
         maxZoom: 16,
       );
 
@@ -92,7 +104,7 @@ class _OrderMapState extends State<OrderMap> {
     final animate = !MediaQuery.disableAnimationsOf(context);
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(widget.borderRadius),
       child: Stack(
         children: [
           FlutterMap(
@@ -158,10 +170,16 @@ class _OrderMapState extends State<OrderMap> {
           ),
           // The credit OpenStreetMap's tile policy requires. Our own strip rather
           // than the library's, which overflows at large accessibility text sizes.
-          const Align(alignment: Alignment.bottomRight, child: IgnorePointer(child: _Attribution())),
+          Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: widget.bottomInset),
+              child: const IgnorePointer(child: _Attribution()),
+            ),
+          ),
           if (_userMoved)
             PositionedDirectional(
-              top: 8,
+              top: 8 + widget.topInset,
               end: 8,
               child: FloatingActionButton.small(
                 key: const ValueKey('map-recenter'),

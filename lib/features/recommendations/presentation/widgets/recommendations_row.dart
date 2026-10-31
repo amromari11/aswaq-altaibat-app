@@ -29,7 +29,7 @@ class RecommendationsRow extends ConsumerWidget {
             Text(title, style: AppTextStyles.h2),
             const SizedBox(height: 12),
             SizedBox(
-              height: 220,
+              height: 260,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: products.length,

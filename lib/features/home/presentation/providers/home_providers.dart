@@ -26,6 +26,10 @@ final latestProductsProvider = FutureProvider<List<Product>>((ref) {
   return ref.watch(homeRepositoryProvider).fetchLatestProducts();
 });
 
+final bestSellersProvider = FutureProvider<List<Product>>((ref) {
+  return ref.watch(homeRepositoryProvider).fetchBestSellers();
+});
+
 final appExclusiveProductsProvider = FutureProvider<List<Product>>((ref) {
   return ref.watch(homeRepositoryProvider).fetchAppExclusive();
 });

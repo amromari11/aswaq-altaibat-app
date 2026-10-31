@@ -17,7 +17,7 @@ class AppTheme {
         error: AppColors.error,
         surface: AppColors.surface,
       ),
-      scaffoldBackgroundColor: AppColors.background,
+      scaffoldBackgroundColor: AppColors.canvas,
       fontFamily: GoogleFonts.cairo().fontFamily,
     );
 
@@ -34,7 +34,7 @@ class AppTheme {
         elevation: 0,
         shadowColor: Colors.black.withValues(alpha: 0.06),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
         ),
         margin: EdgeInsets.zero,
       ),
@@ -62,19 +62,21 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
           ),
           elevation: 0,
           textStyle: AppTextStyles.button,
         ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textMuted,
         type: BottomNavigationBarType.fixed,
         showUnselectedLabels: true,
-        elevation: 8,
+        elevation: 12,
+        selectedLabelStyle: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w800),
+        unselectedLabelStyle: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
       ),
       dividerTheme: const DividerThemeData(
         color: AppColors.border,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../cart/domain/entities/fulfillment.dart';
 import '../../domain/entities/order_status.dart';
 
 /// The four stages a customer follows, in order.
@@ -12,33 +13,43 @@ const _steps = [
   (title: 'تم التسليم', caption: 'وصل طلبك — بالهناء والعافية', icon: Icons.check_circle),
 ];
 
+/// The same four stages for an order collected at the branch.
+const _pickupSteps = [
+  (title: 'تم الاستلام', caption: 'استلمنا طلبك', icon: Icons.receipt_long),
+  (title: 'قيد التحضير', caption: 'نجهّز منتجاتك', icon: Icons.shopping_basket),
+  (title: 'جاهز للاستلام', caption: 'تفضّل إلى الفرع', icon: Icons.storefront),
+  (title: 'تم الاستلام من الفرع', caption: 'بالهناء والعافية', icon: Icons.check_circle),
+];
+
 /// Vertical timeline: finished steps are filled with a check, the current step
 /// is highlighted (with a gentle pulse), later steps are outlined.
 class OrderStepper extends StatelessWidget {
-  const OrderStepper({super.key, required this.status});
+  const OrderStepper({super.key, required this.status, this.orderType = OrderType.delivery});
 
   final OrderStatus status;
+  final OrderType orderType;
 
   @override
   Widget build(BuildContext context) {
     final current = status.step;
+    final steps = orderType == OrderType.pickup ? _pickupSteps : _steps;
     final delivered = status == OrderStatus.delivered;
 
     return Column(
       children: [
-        for (var i = 0; i < _steps.length; i++)
+        for (var i = 0; i < steps.length; i++)
           _StepRow(
             key: ValueKey('order-step-$i'),
-            title: _steps[i].title,
-            caption: _steps[i].caption,
-            icon: _steps[i].icon,
+            title: steps[i].title,
+            caption: steps[i].caption,
+            icon: steps[i].icon,
             // Delivered completes every step, including the last.
             state: i < current || delivered
                 ? _StepState.done
                 : i == current
                     ? _StepState.active
                     : _StepState.upcoming,
-            isLast: i == _steps.length - 1,
+            isLast: i == steps.length - 1,
             // The line below a step is "travelled" once the next step is reached.
             lineDone: i < current || delivered,
           ),
@@ -114,7 +125,8 @@ class _StepRow extends StatelessWidget {
                     ),
                   ),
                   if (isActive || isDone)
-                    Text(caption, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                    Text(caption,
+                        style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
                 ],
               ),
             ),
@@ -170,7 +182,8 @@ class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     switch (widget.state) {
       case _StepState.done:
-        return _circle(fill: AppColors.primary, child: const Icon(Icons.check, color: Colors.white, size: 20));
+        return _circle(
+            fill: AppColors.primary, child: const Icon(Icons.check, color: Colors.white, size: 20));
       case _StepState.upcoming:
         return _circle(
           fill: AppColors.background,
@@ -195,7 +208,8 @@ class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
               child!,
             ],
           ),
-          child: _circle(fill: AppColors.accent, child: Icon(widget.icon, color: Colors.white, size: 18)),
+          child: _circle(
+              fill: AppColors.accent, child: Icon(widget.icon, color: Colors.white, size: 18)),
         );
     }
   }

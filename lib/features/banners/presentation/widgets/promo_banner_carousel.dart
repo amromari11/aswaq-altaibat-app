@@ -34,7 +34,7 @@ class _PromoBannerCarouselState extends State<PromoBannerCarousel> {
         CarouselSlider.builder(
           itemCount: banners.length,
           options: CarouselOptions(
-            height: 150,
+            height: 172,
             viewportFraction: 0.92,
             autoPlay: banners.length > 1,
             // No endless looping: the slider would clone a lone banner, and keeping the pages
@@ -77,6 +77,8 @@ class _BannerCard extends StatelessWidget {
   final PromoBanner banner;
   final VoidCallback? onTap;
 
+  static const ctaKey = ValueKey('banner-cta');
+
   @override
   Widget build(BuildContext context) {
     final title = banner.title;
@@ -85,48 +87,99 @@ class _BannerCard extends StatelessWidget {
       label: title,
       child: GestureDetector(
         onTap: onTap,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CachedNetworkImage(
-                imageUrl: banner.imageUrl,
-                fit: BoxFit.cover,
-                fadeInDuration: const Duration(milliseconds: 200),
-                placeholder: (_, __) => const ColoredBox(color: AppColors.primaryLight),
-                errorWidget: (_, __, ___) => const ColoredBox(
-                  color: AppColors.primaryLight,
-                  child: Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
-                ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
-              if (title != null)
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: DecoratedBox(
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: banner.imageUrl,
+                  fit: BoxFit.cover,
+                  fadeInDuration: const Duration(milliseconds: 200),
+                  placeholder: (_, __) => const ColoredBox(color: AppColors.primaryLight),
+                  errorWidget: (_, __, ___) => const ColoredBox(
+                    color: AppColors.primaryLight,
+                    child: Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
+                  ),
+                ),
+                if (title != null) ...[
+                  // Darkens the side the words sit on, so they read on any photo.
+                  DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Colors.black.withValues(alpha: 0.65)],
+                        begin: AlignmentDirectional.centerStart,
+                        end: AlignmentDirectional.centerEnd,
+                        colors: [AppColors.primaryDark.withValues(alpha: 0.82), Colors.transparent],
+                        stops: const [0.0, 0.85],
                       ),
                     ),
+                  ),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 28, 14, 12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.h3
-                              .copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+                      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                      child: FractionallySizedBox(
+                        widthFactor: 0.62,
+                        // A very large system font scales the words down rather than overflowing.
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerStart,
+                          child: SizedBox(
+                            width: 240,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.h2.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.25,
+                                  ),
+                                ),
+                                if (onTap != null) ...[
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    key: ctaKey,
+                                    padding:
+                                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accent,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'تسوّق الآن',
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+                ],
+              ],
+            ),
           ),
         ),
       ),

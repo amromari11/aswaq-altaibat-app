@@ -70,17 +70,48 @@ class HomeRepository {
     return _parseProducts(rows);
   }
 
+  /// Characters that mean something inside a PostgREST `or=(...)` filter.
+  static String _cleanTerm(String query) {
+    var term = query;
+    for (final ch in [',', '(', ')', '%', '*', '\\']) {
+      term = term.replaceAll(ch, ' ');
+    }
+    return term.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  /// The `or=` filter for a search box entry: name (either language), plus an
+  /// exact SKU match when it looks like a barcode (6+ digits) — the POS
+  /// barcode is the product's SKU.
+  static String searchFilter(String query) {
+    final term = _cleanTerm(query);
+    final filters = ['name.ilike.%$term%', 'name_ar.ilike.%$term%'];
+    if (RegExp(r'^\d{6,}$').hasMatch(term)) filters.add('sku.eq.$term');
+    return filters.join(',');
+  }
+
   Future<List<Product>> search(String query, {int limit = 20}) async {
-    if (query.trim().isEmpty) return [];
+    if (_cleanTerm(query).isEmpty) return [];
 
     final rows = await _client
         .from('products')
         .select()
         .eq('is_active', true)
-        .or('name.ilike.%$query%,name_ar.ilike.%$query%')
+        .or(searchFilter(query))
         .limit(limit);
 
     return _parseProducts(rows);
+  }
+
+  /// The best-selling products of the last 30 days (`best_sellers`, backend
+  /// migration 016). Empty - not an error - when the function isn't on the
+  /// server yet, so Home simply leaves the section out.
+  Future<List<Product>> fetchBestSellers({int limit = 20}) async {
+    try {
+      final rows = await _client.rpc('best_sellers', params: {'p_limit': limit});
+      return _parseProducts(rows);
+    } on PostgrestException {
+      return [];
+    }
   }
 
   /// One active product by id, or null if it is gone or hidden (a banner may point at one).

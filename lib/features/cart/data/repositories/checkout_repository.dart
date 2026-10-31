@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../home/domain/entities/product.dart';
 import '../../domain/entities/cart_item.dart';
+import '../../domain/entities/fulfillment.dart';
 
 /// One cart line that can't be fulfilled as-is: either [product] has gone
 /// out of stock entirely ([availableQuantity] 0), or there's less of it
@@ -21,7 +22,9 @@ class StockIssue {
 /// `place_order` refused the order. [code] is the database function's error
 /// message (see backend supabase/008): `below_minimum`, `out_of_stock`,
 /// `insufficient_stock`, `unknown_product`, `invalid_phone`, `invalid_name`,
-/// `invalid_address`, `invalid_items`, `invalid_zone`, `too_many_orders`.
+/// `invalid_address`, `invalid_items`, `invalid_zone`, `too_many_orders`, and
+/// since 015 `invalid_order_type`, `pickup_unavailable`,
+/// `scheduling_unavailable`, `invalid_schedule`, `store_closed`.
 class OrderRejectedException implements Exception {
   OrderRejectedException(this.code);
 
@@ -84,12 +87,19 @@ class CheckoutRepository {
   /// [customerPhone] must already be normalized E.164
   /// (see `JordanPhone.normalize`). Throws [OrderRejectedException] when the
   /// database refuses the order.
+  ///
+  /// A pickup order needs no address or zone. [scheduledTime] is the start of
+  /// the chosen slot; null means as soon as possible. The two newer arguments
+  /// are only sent when used, so a delivery-now order still works against a
+  /// server without migration 015.
   Future<String> placeOrder({
     required String customerName,
     required String customerPhone,
     required List<CartItem> items,
-    required String deliveryAddress,
-    required String zoneId,
+    String? deliveryAddress,
+    String? zoneId,
+    OrderType orderType = OrderType.delivery,
+    DateTime? scheduledTime,
     String? addressId,
     double? deliveryLat,
     double? deliveryLng,
@@ -112,6 +122,8 @@ class CheckoutRepository {
         // Made up by the phone and kept there: it is the key to tracking this
         // order without an account (see backend supabase/009).
         'p_tracking_token': trackingToken,
+        if (orderType != OrderType.delivery) 'p_order_type': orderType.wire,
+        if (scheduledTime != null) 'p_scheduled_time': scheduledTime.toUtc().toIso8601String(),
       });
       return id as String;
     } on PostgrestException catch (e) {

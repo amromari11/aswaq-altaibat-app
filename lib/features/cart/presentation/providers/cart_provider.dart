@@ -172,3 +172,12 @@ final freeDeliveryRemainingProvider = Provider<double>((ref) {
   final remaining = AppConfig.freeDeliveryThresholdJod - subtotal;
   return remaining > 0 ? remaining : 0;
 });
+
+/// How much the discounts in the cart save, in JOD (0 when nothing is on offer).
+final cartSavingsProvider = Provider<double>((ref) {
+  final items = ref.watch(cartProvider).values;
+  return items.fold<double>(
+    0,
+    (sum, item) => sum + (item.product.hasDiscount ? (item.product.price - item.product.displayPrice) * item.quantity : 0),
+  );
+});

@@ -13,7 +13,7 @@ class OrderAgainRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 220,
+      height: 260,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: products.length,

@@ -1,3 +1,4 @@
+import '../../features/search/presentation/pages/barcode_scan_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -42,6 +43,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/address-form',
         builder: (context, state) => AddressFormPage(existing: state.extra as SavedAddress?),
+      ),
+      GoRoute(
+        path: '/scan',
+        builder: (context, state) => const BarcodeScanPage(),
       ),
       GoRoute(
         path: '/location-picker',

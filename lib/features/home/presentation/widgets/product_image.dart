@@ -98,3 +98,22 @@ class _CategoryFallback extends StatelessWidget {
     );
   }
 }
+
+
+/// A product's picture without the framing tile or the "illustrative" label —
+/// for tiny uses (the cart bar). Its own picture, else its category's.
+class ProductThumb extends ConsumerWidget {
+  const ProductThumb({super.key, required this.product});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categoryUrl = ref.watch(categoryImageUrlProvider(product.categoryId));
+    return CategoryImage(
+      imageUrl: product.hasOwnImage ? product.imageUrl : categoryUrl,
+      iconColor: AppColors.textMuted,
+      cacheWidth: 100,
+    );
+  }
+}

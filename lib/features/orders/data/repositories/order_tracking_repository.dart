@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../cart/domain/entities/fulfillment.dart';
 import '../../domain/entities/order_change.dart';
 import '../../domain/entities/order_ref.dart';
 import '../../domain/entities/order_status.dart';
@@ -43,6 +44,10 @@ class OrderTrackingRepository {
           total: (row['total_price'] as num).toDouble(),
           itemCount: (row['item_count'] as num).toInt(),
           zoneName: row['zone_name_ar'] as String?,
+          orderType: OrderType.fromWire(row['order_type'] as String?),
+          scheduledTime: row['scheduled_time'] == null
+              ? null
+              : DateTime.parse(row['scheduled_time'] as String),
         ),
     ];
   }

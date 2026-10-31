@@ -5,16 +5,22 @@ import 'dart:math';
 import 'package:aswaq_altaibat/core/config/app_config.dart';
 import 'package:aswaq_altaibat/core/supabase/supabase_providers.dart';
 import 'package:aswaq_altaibat/core/theme/app_colors.dart';
+import 'package:aswaq_altaibat/core/utils/external_launcher.dart';
+import 'package:aswaq_altaibat/features/cart/domain/entities/fulfillment.dart';
+import 'package:aswaq_altaibat/features/cart/presentation/providers/fulfillment_providers.dart';
 import 'package:aswaq_altaibat/features/orders/data/local/my_orders_store.dart';
 import 'package:aswaq_altaibat/features/orders/data/repositories/order_tracking_repository.dart';
 import 'package:aswaq_altaibat/features/orders/domain/entities/order_change.dart';
 import 'package:aswaq_altaibat/features/orders/domain/entities/order_ref.dart';
 import 'package:aswaq_altaibat/features/orders/domain/entities/order_status.dart';
 import 'package:aswaq_altaibat/features/orders/domain/entities/order_tracking.dart';
+import 'package:aswaq_altaibat/features/orders/domain/services/trip_math.dart';
 import 'package:aswaq_altaibat/features/orders/presentation/pages/my_orders_page.dart';
 import 'package:aswaq_altaibat/features/orders/presentation/pages/order_tracking_page.dart';
 import 'package:aswaq_altaibat/features/orders/presentation/providers/order_providers.dart';
+import 'package:aswaq_altaibat/features/orders/presentation/widgets/driver_card.dart';
 import 'package:aswaq_altaibat/features/orders/presentation/widgets/order_map.dart';
+import 'package:aswaq_altaibat/features/orders/presentation/widgets/order_progress_bar.dart';
 import 'package:aswaq_altaibat/features/orders/presentation/widgets/order_stepper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' show FlutterMap, Marker, MarkerLayer, PolylineLayer, TileCoordinates, TileLayer, TileProvider;
@@ -108,6 +114,55 @@ class _FakeRepository implements OrderTrackingRepository {
 }
 
 const _noAnimation = MediaQueryData(disableAnimations: true);
+
+const _branchWithPhone = StoreSettings(
+  branchName: 'أسواق الطيبات - فرع الزرقاء',
+  branchAddress: 'الزرقاء، شارع الملك عبدالله',
+  branchPhone: '0791112222',
+  latitude: 32.073313,
+  longitude: 36.095312,
+  opensAtMinutes: 8 * 60,
+  closesAtMinutes: 23 * 60,
+);
+
+const _branch = StoreSettings(
+  branchName: 'أسواق الطيبات - فرع الزرقاء',
+  branchAddress: 'الزرقاء، شارع الملك عبدالله',
+  latitude: 32.073313,
+  longitude: 36.095312,
+  opensAtMinutes: 8 * 60,
+  closesAtMinutes: 23 * 60,
+);
+
+const _wireStatus = {
+  OrderStatus.pending: 'pending',
+  OrderStatus.preparing: 'preparing',
+  OrderStatus.outForDelivery: 'out_for_delivery',
+  OrderStatus.delivered: 'delivered',
+};
+
+/// A pickup order as `get_order_tracking` returns it (backend 015).
+OrderTracking _pickupOrder(OrderStatus status, {DateTime? scheduled}) {
+  final created = DateTime.now().subtract(const Duration(minutes: 5));
+  return OrderTracking.fromJson({
+    'id': _ref.id,
+    'status': _wireStatus[status],
+    'created_at': created.toUtc().toIso8601String(),
+    'updated_at': created.toUtc().toIso8601String(),
+    'subtotal': 8.25,
+    'delivery_fee': 0,
+    'total_price': 8.25,
+    'delivery_address': null,
+    'zone_name_ar': null,
+    'eta_minutes': null,
+    'order_type': 'pickup',
+    'scheduled_time': scheduled?.toUtc().toIso8601String(),
+    'driver': null,
+    'items': [
+      {'name_ar': 'حليب', 'quantity': 2, 'unit_price': 2.5, 'line_total': 5.0},
+    ],
+  });
+}
 
 /// 1x1 transparent PNG: stands in for map tiles so tests make no network calls.
 final _blankTile = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
@@ -668,6 +723,8 @@ void main() {
   group('tracking screen', () {
     late _FakeRepository repo;
     late GoRouter router;
+    var storeSettings = _branch;
+    final launched = <Uri>[];
 
     Future<ProviderContainer> pumpPage(WidgetTester tester, {bool canPop = true}) async {
       tester.view.physicalSize = const Size(800, 3600);
@@ -690,6 +747,11 @@ void main() {
         orderTrackingRepositoryProvider.overrideWithValue(repo),
         trackingPollIntervalProvider.overrideWithValue(const Duration(minutes: 10)),
         orderMapTileProviderProvider.overrideWithValue(_BlankTiles()),
+        storeSettingsProvider.overrideWith((ref) async => storeSettings),
+        externalLauncherProvider.overrideWithValue((uri) async {
+          launched.add(uri);
+          return true;
+        }),
       ]);
       _containers.add(container);
       await tester.pumpWidget(UncontrolledProviderScope(
@@ -707,7 +769,11 @@ void main() {
       return container;
     }
 
-    setUp(() => repo = _FakeRepository());
+    setUp(() {
+      repo = _FakeRepository();
+      storeSettings = _branch;
+      launched.clear();
+    });
 
     screenTest('shows the status, stepper, delivery details, items and totals', (tester) async {
       repo.tracking = _order(OrderStatus.preparing, notes: 'اتصل عند الوصول');
@@ -939,6 +1005,154 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('جارٍ تحضير طلبك'), findsOneWidget);
     });
+
+    screenTest('pickup ready: "ready for pickup", branch details, no delivery fee, store-only map', (tester) async {
+      repo.tracking = _pickupOrder(OrderStatus.outForDelivery);
+      await pumpPage(tester);
+
+      expect(find.text('طلبك جاهز للاستلام'), findsOneWidget);
+      expect(find.text('تفاصيل الاستلام'), findsOneWidget);
+      expect(find.text('أسواق الطيبات - فرع الزرقاء'), findsOneWidget);
+      expect(find.text('08:00 – 23:00'), findsOneWidget);
+      expect(find.text('جاهز للاستلام'), findsWidgets, reason: 'the stepper uses pickup wording');
+      expect(find.text('خرج للتوصيل'), findsNothing);
+      expect(find.text('رسوم التوصيل (استلام من الفرع)'), findsOneWidget);
+      expect(find.textContaining('استلمه من الفرع'), findsOneWidget);
+      final markers = tester.widgetList<MarkerLayer>(find.byType(MarkerLayer)).expand((layer) => layer.markers).toList();
+      expect(markers, hasLength(1), reason: 'only the store pin — no home, no driver');
+    });
+
+    screenTest('pickup picked up: says so', (tester) async {
+      repo.tracking = _pickupOrder(OrderStatus.delivered);
+      await pumpPage(tester);
+      expect(find.text('تم استلام طلبك'), findsOneWidget);
+    });
+
+    screenTest('a scheduled order shows its slot instead of an arrival estimate', (tester) async {
+      repo.tracking = _pickupOrder(OrderStatus.pending, scheduled: DateTime.now().add(const Duration(days: 1)));
+      await pumpPage(tester);
+      expect(find.byKey(const ValueKey('order-slot')), findsOneWidget);
+      expect(find.textContaining('موعد الاستلام: غداً'), findsOneWidget);
+      expect(find.byKey(const ValueKey('order-eta')), findsNothing);
+    });
+
+    screenTest('the sheet counts down to the arrival and says it is on time', (tester) async {
+      repo.tracking = _order(OrderStatus.preparing, createdAt: DateTime.now().subtract(const Duration(minutes: 5)));
+      await pumpPage(tester);
+      final minutes = tester.widget<Text>(find.byKey(const ValueKey('order-minutes-left'))).data!;
+      expect(minutes, matches(RegExp(r'^(29|30) دقيقة$')), reason: '35 min estimate, placed 5 min ago');
+      expect(find.text('في الموعد'), findsOneWidget);
+      expect(find.byKey(const ValueKey('map-eta-title')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('map-eta-title'))).data, 'الوصول خلال $minutes');
+    });
+
+    screenTest('past the estimate: "moments", a small-delay chip and no negative time', (tester) async {
+      repo.tracking = _order(OrderStatus.preparing, createdAt: DateTime.now().subtract(const Duration(minutes: 60)));
+      await pumpPage(tester);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('order-minutes-left'))).data, 'لحظات');
+      expect(find.text('تأخير بسيط'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('map-eta-title'))).data, 'يصل خلال لحظات');
+    });
+
+    screenTest('no arrival countdown for a delivered order', (tester) async {
+      repo.tracking = _order(OrderStatus.delivered);
+      await pumpPage(tester);
+      expect(find.byKey(const ValueKey('order-minutes-left')), findsNothing);
+      expect(find.text('في الموعد'), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('map-eta-title'))).data, 'تم التسليم');
+    });
+
+    screenTest('the progress bar marks done, current and upcoming stages', (tester) async {
+      repo.tracking = _order(OrderStatus.preparing);
+      await pumpPage(tester);
+      Color colorOf(int i) => (tester.widget<Container>(find.byKey(OrderProgressBar.segmentKey(i))).decoration as BoxDecoration).color!;
+      expect(colorOf(0), AppColors.primary);
+      expect(colorOf(1), AppColors.accent);
+      expect(colorOf(2), AppColors.border);
+      expect(colorOf(3), AppColors.border);
+      expect(find.text('في الطريق'), findsOneWidget);
+    });
+
+    screenTest('the map card shows how far away the driver is and how far along the trip', (tester) async {
+      // Customer 0.2 degrees north of the store; the driver is halfway there.
+      const home = LatLng(AppConfig.storeLatitude + 0.2, AppConfig.storeLongitude);
+      final driver = _driverAt(AppConfig.storeLatitude + 0.1, AppConfig.storeLongitude);
+      repo.tracking = _order(OrderStatus.outForDelivery, lat: home.latitude, lng: home.longitude, driver: driver);
+      await pumpPage(tester);
+      final bar = tester.widget<LinearProgressIndicator>(find.byKey(const ValueKey('map-eta-progress')));
+      expect(bar.value, closeTo(0.5, 0.02));
+      expect(tester.widget<Text>(find.byKey(const ValueKey('map-eta-distance'))).data, matches(RegExp(r'^يبعد 11\.\d كم$')));
+    });
+
+    screenTest('no customer pin: no distance bar, the card still counts down', (tester) async {
+      repo.tracking = _order(OrderStatus.outForDelivery, lat: null, lng: null);
+      await pumpPage(tester);
+      expect(find.byKey(const ValueKey('map-eta-progress')), findsNothing);
+      expect(find.byKey(const ValueKey('map-eta-title')), findsOneWidget);
+    });
+
+    screenTest('driver card: name, number, and call / WhatsApp buttons that open the right links', (tester) async {
+      repo.tracking = _order(OrderStatus.outForDelivery).withDriverInfo(const DriverInfo(name: 'خالد أحمد', phone: '+962791112233'));
+      await pumpPage(tester);
+      expect(find.byType(DriverCard), findsOneWidget);
+      expect(find.text('خالد أحمد'), findsOneWidget);
+      expect(find.text('0791112233'), findsOneWidget);
+      expect(find.text('خأ'), findsOneWidget, reason: 'initials of the first two words');
+
+      await tester.ensureVisible(find.byKey(DriverCard.callKey));
+      await tester.tap(find.byKey(DriverCard.callKey));
+      await tester.tap(find.byKey(DriverCard.chatKey));
+      await tester.pump();
+      expect(launched.map((u) => u.toString()), ['tel:+962791112233', 'https://wa.me/962791112233']);
+    });
+
+    screenTest('no driver details: the buttons reach the shop, and the card says so', (tester) async {
+      storeSettings = _branchWithPhone;
+      repo.tracking = _order(OrderStatus.outForDelivery);
+      await pumpPage(tester);
+      expect(find.text('سائق التوصيل'), findsOneWidget);
+      expect(find.text('للتواصل اتصل بالمتجر'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(DriverCard.callKey));
+      await tester.tap(find.byKey(DriverCard.callKey));
+      await tester.pump();
+      expect(launched.single.toString(), 'tel:+962791112222');
+    });
+
+    screenTest('no numbers anywhere: the card shows the driver is on the way, without dead buttons', (tester) async {
+      repo.tracking = _order(OrderStatus.outForDelivery);
+      await pumpPage(tester);
+      expect(find.byType(DriverCard), findsOneWidget);
+      expect(find.byKey(DriverCard.callKey), findsNothing);
+      expect(find.byKey(DriverCard.chatKey), findsNothing);
+    });
+
+    screenTest('the driver card appears only while the order is out for delivery, and never for pickup', (tester) async {
+      repo.tracking = _order(OrderStatus.preparing).withDriverInfo(const DriverInfo(name: 'خالد', phone: '+962791112233'));
+      await pumpPage(tester);
+      expect(find.byType(DriverCard), findsNothing);
+    });
+
+    screenTest('pickup orders have no driver card', (tester) async {
+      repo.tracking = _pickupOrder(OrderStatus.outForDelivery);
+      await pumpPage(tester);
+      expect(find.byType(DriverCard), findsNothing);
+      expect(find.byKey(const ValueKey('map-eta-progress')), findsNothing);
+    });
+
+    screenTest('the shop phone puts a call button on the map', (tester) async {
+      storeSettings = _branchWithPhone;
+      repo.tracking = _order(OrderStatus.preparing);
+      await pumpPage(tester);
+      await tester.tap(find.byIcon(Icons.call_outlined));
+      await tester.pump();
+      expect(launched.single.toString(), 'tel:+962791112222');
+    });
+
+    screenTest('without a shop phone there is no call button on the map', (tester) async {
+      repo.tracking = _order(OrderStatus.preparing);
+      await pumpPage(tester);
+      expect(find.byIcon(Icons.call_outlined), findsNothing);
+    });
   });
 
   group('orders history', () {
@@ -1034,6 +1248,87 @@ void main() {
       repo = failing;
       await pumpList(tester, local: [_ref]);
       expect(find.text('تعذر تحميل طلباتك'), findsOneWidget);
+    });
+  });
+
+  group('delivery or pickup in the order model', () {
+    test('tracking JSON carries the type and slot; pickup and scheduled orders have no arrival estimate', () {
+      final slot = DateTime.utc(2026, 11, 3, 7);
+      final order = _pickupOrder(OrderStatus.preparing, scheduled: slot);
+      expect(order.isPickup, isTrue);
+      expect(order.scheduledTime, slot);
+      expect(order.expectedBy, isNull);
+      expect(order.withDriver(null).orderType, OrderType.pickup, reason: 'kept when the driver changes');
+      expect(_order(OrderStatus.preparing).orderType, OrderType.delivery, reason: 'older orders are deliveries');
+      expect(_order(OrderStatus.preparing).expectedBy, isNotNull);
+    });
+
+    test('pickup renames only "out for delivery" and "delivered"', () {
+      expect(OrderStatus.outForDelivery.labelFor(OrderType.pickup), 'جاهز للاستلام');
+      expect(OrderStatus.delivered.labelFor(OrderType.pickup), 'تم الاستلام');
+      expect(OrderStatus.preparing.labelFor(OrderType.pickup), OrderStatus.preparing.labelAr);
+      expect(OrderStatus.outForDelivery.labelFor(OrderType.delivery), 'خرج للتوصيل');
+    });
+
+    test('driver_info JSON: names and numbers are trimmed, blanks become null', () {
+      final info = DriverInfo.fromJson({'name': '  خالد  ', 'phone': ''});
+      expect(info.name, 'خالد');
+      expect(info.phone, isNull);
+      expect(info.hasPhone, isFalse);
+      expect(DriverInfo.fromJson({'name': null, 'phone': '+962791112233'}).hasPhone, isTrue);
+    });
+
+    test('tracking JSON carries driver_info; copies keep it', () {
+      final order = OrderTracking.fromJson({
+        'id': _ref.id,
+        'status': 'out_for_delivery',
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'subtotal': 1,
+        'delivery_fee': 0,
+        'total_price': 1,
+        'delivery_address': 'x',
+        'driver_info': {'name': 'سالم', 'phone': '+962791112233'},
+        'items': [],
+      });
+      expect(order.driverInfo, const DriverInfo(name: 'سالم', phone: '+962791112233'));
+      expect(order.withDriver(null).driverInfo, order.driverInfo);
+      expect(order.withDriverInfo(null).driverInfo, isNull);
+      expect(_order(OrderStatus.preparing).driverInfo, isNull, reason: 'older servers send none');
+    });
+
+    test('trip math: progress, distance labels and minutes', () {
+      const store = LatLng(32.0, 36.0);
+      const home = LatLng(32.2, 36.0);
+      expect(tripProgress(store: store, home: null, driver: null), isNull);
+      expect(tripProgress(store: store, home: home, driver: null)!.fraction, 0, reason: 'still at the store');
+      expect(tripProgress(store: store, home: home, driver: home)!.fraction, 1);
+      expect(tripProgress(store: store, home: home, driver: const LatLng(32.1, 36.0))!.fraction, closeTo(0.5, 0.01));
+      expect(tripProgress(store: store, home: home, driver: const LatLng(31.9, 36.0))!.fraction, 0, reason: 'never negative');
+      expect(distanceLabel(0.45), '450 م');
+      expect(distanceLabel(1.24), '1.2 كم');
+      expect(distanceLabel(12), '12.0 كم');
+      expect(minutesWords(0), 'لحظات');
+      expect(minutesWords(1), 'دقيقة');
+      expect(minutesWords(2), 'دقيقتان');
+      expect(minutesWords(7), '7 دقائق');
+      expect(minutesWords(25), '25 دقيقة');
+      final now = DateTime.now();
+      expect(minutesLeft(_order(OrderStatus.preparing, createdAt: now.subtract(const Duration(minutes: 5))), now), inInclusiveRange(29, 30));
+      expect(minutesLeft(_order(OrderStatus.preparing, createdAt: now.subtract(const Duration(hours: 2))), now), 0);
+      expect(minutesLeft(_pickupOrder(OrderStatus.preparing), now), isNull, reason: 'pickup has no arrival estimate');
+    });
+
+    testWidgets('pickup stepper', (tester) async {
+      await tester.pumpWidget(const MaterialApp(
+        home: MediaQuery(
+          data: _noAnimation,
+          child: Scaffold(body: OrderStepper(status: OrderStatus.preparing, orderType: OrderType.pickup)),
+        ),
+      ));
+      expect(find.text('جاهز للاستلام'), findsOneWidget);
+      expect(find.text('تم الاستلام من الفرع'), findsOneWidget);
+      expect(find.text('خرج للتوصيل'), findsNothing);
     });
   });
 }

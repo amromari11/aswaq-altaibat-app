@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/supabase/supabase_providers.dart';
 import '../../data/repositories/checkout_repository.dart';
+import '../../domain/entities/fulfillment.dart';
 import 'cart_provider.dart';
 
 final checkoutRepositoryProvider = Provider<CheckoutRepository>((ref) {
@@ -27,8 +28,10 @@ class CheckoutController extends StateNotifier<AsyncValue<void>> {
   Future<String?> placeOrder({
     required String customerName,
     required String customerPhone,
-    required String deliveryAddress,
-    required String zoneId,
+    String? deliveryAddress,
+    String? zoneId,
+    OrderType orderType = OrderType.delivery,
+    DateTime? scheduledTime,
     double? deliveryLat,
     double? deliveryLng,
     String? notes,
@@ -58,6 +61,8 @@ class CheckoutController extends StateNotifier<AsyncValue<void>> {
             items: items,
             deliveryAddress: deliveryAddress,
             zoneId: zoneId,
+            orderType: orderType,
+            scheduledTime: scheduledTime,
             addressId: addressId,
             deliveryLat: deliveryLat,
             deliveryLng: deliveryLng,
@@ -74,6 +79,7 @@ class CheckoutController extends StateNotifier<AsyncValue<void>> {
   }
 }
 
-final checkoutControllerProvider = StateNotifierProvider<CheckoutController, AsyncValue<void>>((ref) {
+final checkoutControllerProvider =
+    StateNotifierProvider<CheckoutController, AsyncValue<void>>((ref) {
   return CheckoutController(ref);
 });

@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../cart/domain/entities/fulfillment.dart';
+import '../../../cart/domain/services/slot_planner.dart';
 import '../../domain/entities/order_status.dart';
 import '../../domain/entities/order_tracking.dart';
 import '../providers/order_providers.dart';
@@ -135,7 +137,9 @@ class _OrderCard extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: status.isActive ? color : AppColors.border, width: status.isActive ? 1.5 : 1),
+              border: Border.all(
+                  color: status.isActive ? color : AppColors.border,
+                  width: status.isActive ? 1.5 : 1),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,8 +155,9 @@ class _OrderCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        status.labelAr,
-                        style: AppTextStyles.caption.copyWith(color: color, fontWeight: FontWeight.w700),
+                        status.labelFor(order.orderType),
+                        style: AppTextStyles.caption
+                            .copyWith(color: color, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
@@ -160,16 +165,20 @@ class _OrderCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   '${DateFormat('yyyy-MM-dd HH:mm').format(order.createdAt)} • ${order.itemCount} منتجات'
-                  '${order.zoneName == null ? '' : ' • ${order.zoneName}'}',
+                  '${order.orderType == OrderType.pickup ? ' • استلام من الفرع' : (order.zoneName == null ? '' : ' • ${order.zoneName}')}'
+                  '${order.scheduledTime == null || !status.isActive ? '' : ' • موعد ${SlotPlanner.moment(order.scheduledTime!, DateTime.now())}'}',
                   style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Text(CurrencyFormatter.jod(order.total), style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary)),
+                    Text(CurrencyFormatter.jod(order.total),
+                        style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary)),
                     const Spacer(),
                     if (status.isActive) ...[
-                      Text('تتبع الطلب', style: AppTextStyles.caption.copyWith(color: color, fontWeight: FontWeight.w700)),
+                      Text('تتبع الطلب',
+                          style: AppTextStyles.caption
+                              .copyWith(color: color, fontWeight: FontWeight.w700)),
                       Icon(Icons.chevron_left, color: color, size: 20),
                     ],
                   ],
@@ -194,14 +203,21 @@ class _Scrollable extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        child: ConstrainedBox(constraints: BoxConstraints(minHeight: constraints.maxHeight), child: Center(child: child)),
+        child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: child)),
       ),
     );
   }
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({required this.icon, required this.title, required this.detail, required this.actionLabel, required this.onAction});
+  const _Empty(
+      {required this.icon,
+      required this.title,
+      required this.detail,
+      required this.actionLabel,
+      required this.onAction});
 
   final IconData icon;
   final String title;
@@ -220,7 +236,9 @@ class _Empty extends StatelessWidget {
           const SizedBox(height: 12),
           Text(title, style: AppTextStyles.h3),
           const SizedBox(height: 6),
-          Text(detail, textAlign: TextAlign.center, style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+          Text(detail,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 18),
           ElevatedButton(onPressed: onAction, child: Text(actionLabel)),
         ],

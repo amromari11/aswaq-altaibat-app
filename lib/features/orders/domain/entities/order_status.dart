@@ -1,4 +1,10 @@
+import '../../../cart/domain/entities/fulfillment.dart';
+
 /// Mirrors the `order_status` enum in the database.
+///
+/// Pickup orders (backend 015) reuse the same statuses: "out for delivery"
+/// reads as "ready for pickup" and "delivered" as "picked up" — use the
+/// `…For(type)` methods wherever an order's type is known.
 enum OrderStatus {
   pending,
   confirmed,
@@ -62,6 +68,32 @@ enum OrderStatus {
       case OrderStatus.cancelled:
         return 'ملغي';
     }
+  }
+
+  String labelFor(OrderType type) {
+    if (type == OrderType.pickup) {
+      if (this == OrderStatus.outForDelivery) return 'جاهز للاستلام';
+      if (this == OrderStatus.delivered) return 'تم الاستلام';
+    }
+    return labelAr;
+  }
+
+  String headlineFor(OrderType type) {
+    if (type == OrderType.pickup) {
+      if (this == OrderStatus.outForDelivery) return 'طلبك جاهز للاستلام';
+      if (this == OrderStatus.delivered) return 'تم استلام طلبك';
+    }
+    return headlineAr;
+  }
+
+  String detailFor(OrderType type) {
+    if (type == OrderType.pickup) {
+      if (this == OrderStatus.outForDelivery) {
+        return 'تفضّل إلى الفرع لاستلام طلبك — الدفع عند الاستلام.';
+      }
+      if (this == OrderStatus.preparing) return 'نجهّز منتجاتك الآن، وسنخبرك عندما يصبح جاهزاً.';
+    }
+    return detailAr;
   }
 
   /// One-line headline for the tracking screen.
