@@ -212,6 +212,12 @@ void main() {
       expect(const PushConfig(apiKey: 'k', projectId: 'a', messagingSenderId: '1', iosAppId: ' ').optionsFor(TargetPlatform.iOS), isNull);
       expect(const PushConfig(apiKey: 'k', projectId: 'a', messagingSenderId: '1', iosAppId: 'x').optionsFor(TargetPlatform.android), isNull,
           reason: 'an iOS app id does not configure Android');
+
+      const both = PushConfig(
+        apiKey: 'ios-key', androidApiKey: 'droid-key', projectId: 'a', messagingSenderId: '1', iosAppId: 'i', androidAppId: 'd');
+      expect(both.optionsFor(TargetPlatform.android)!.apiKey, 'droid-key');
+      expect(both.optionsFor(TargetPlatform.iOS)!.apiKey, 'ios-key');
+      expect(const PushConfig(apiKey: 'shared', projectId: 'a', messagingSenderId: '1', androidAppId: 'd').optionsFor(TargetPlatform.android)!.apiKey, 'shared');
     });
 
     test('the default (no --dart-define) is unconfigured', () {
