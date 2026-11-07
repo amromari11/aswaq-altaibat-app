@@ -14,6 +14,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/cart/presentation/providers/cart_abandonment_provider.dart';
 import 'features/cart/presentation/providers/cart_provider.dart';
+import 'features/driver/presentation/providers/driver_providers.dart';
 import 'features/location/presentation/providers/location_providers.dart';
 
 Future<void> main() async {
@@ -56,6 +57,15 @@ Future<void> main() async {
 class AswaqAltaibatApp extends ConsumerWidget {
   const AswaqAltaibatApp({super.key});
 
+  /// Checks the freshly signed-in user's role; a lookup failure just leaves
+  /// them where they are (the account tab still links to driver mode).
+  static Future<void> _openDriverModeIfDriver(WidgetRef ref) async {
+    try {
+      final profile = await ref.read(driverProfileProvider.future);
+      if (profile.isDriver) ref.read(appRouterProvider).go('/driver');
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
@@ -92,6 +102,8 @@ class AswaqAltaibatApp extends ConsumerWidget {
         } else if (onLogin) {
           router.go(redirectTo ?? '/home');
         }
+        // A driver account goes straight to driver mode (customers stay put).
+        unawaited(_openDriverModeIfDriver(ref));
       } else if (previous != null && next == null) {
         ref.read(cartProvider.notifier).clearLocalOnly();
         ref.read(savedAddressesProvider.notifier).clearLocalOnly();

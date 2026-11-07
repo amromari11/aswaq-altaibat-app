@@ -10,6 +10,7 @@ import '../../data/repositories/profile_repository.dart';
 import '../providers/profile_providers.dart';
 import '../widgets/phone_entry_fields.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../driver/presentation/providers/driver_providers.dart';
 
 class AccountPage extends ConsumerWidget {
   const AccountPage({super.key});
@@ -53,6 +54,15 @@ class AccountPage extends ConsumerWidget {
               style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 20),
+            if (ref.watch(isDriverProvider))
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.delivery_dining, color: AppColors.accent),
+                title: const Text('وضع السائق'),
+                subtitle: const Text('طلباتك المسندة وحالة التوفر'),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => context.go('/driver'),
+              ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.location_on_outlined, color: AppColors.primary),

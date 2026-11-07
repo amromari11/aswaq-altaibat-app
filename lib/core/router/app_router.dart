@@ -7,6 +7,7 @@ import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/cart/presentation/pages/cart_page.dart';
 import '../../features/cart/presentation/pages/checkout_page.dart';
 import '../../features/categories/presentation/pages/categories_page.dart';
+import '../../features/driver/presentation/pages/driver_dashboard_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/location/domain/entities/saved_address.dart';
 import '../../features/location/presentation/pages/address_form_page.dart';
@@ -28,6 +29,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(path: '/cart', builder: (context, state) => const CartPage()),
       GoRoute(path: '/checkout', builder: (context, state) => const CheckoutPage()),
+      GoRoute(path: '/driver', builder: (context, state) => const DriverDashboardPage()),
       // The token rides in the query string (not `extra`) so the link still
       // works after a browser reload.
       GoRoute(
